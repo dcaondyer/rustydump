@@ -1,0 +1,9 @@
+[package]
+name = "rustydump"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+colored = "3.1.1"
+iced-x86 = "1.21.0"
+goblin = "0.10.7"
