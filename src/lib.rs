@@ -1,5 +1,8 @@
+pub mod analysis;
 pub mod config;
+pub mod decode;
 pub mod demangle;
+pub mod detection;
 pub mod disasm;
 pub mod formats;
 pub mod header;
@@ -46,7 +49,9 @@ pub fn process_file(file: &PathBuf, config: &Config) -> Result<(), Box<dyn Error
         print_full_contents(&bytes, config.section_filter.as_deref())?;
     }
     if config.disassemble || config.disassemble_all {
-        print_ida_file_header(&bytes, file)?;
+        if config.ida_header {
+            print_ida_file_header(&bytes, file)?;
+        }
         disassemble(&bytes, config, symbols::build_symbol_map(&bytes))?;
     }
 
