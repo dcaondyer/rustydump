@@ -1,3 +1,4 @@
+use crate::decode::BackendKind;
 use crate::demangle::DemangleStyle;
 use clap::{ArgGroup, Parser};
 use std::path::PathBuf;
@@ -106,6 +107,14 @@ pub struct Config {
     pub full_contents: bool,
 
     #[arg(
+        short = 'p',
+        long = "private-headers",
+        help = "Display format-specific file header contents",
+        group = "action"
+    )]
+    pub private_headers: bool,
+
+    #[arg(
         short = 't',
         long = "syms",
         help = "Display the symbol table",
@@ -120,14 +129,6 @@ pub struct Config {
         group = "action"
     )]
     pub dynamic_syms: bool,
-
-    #[arg(
-        short = 'p',
-        long = "private-headers",
-        help = "Display format-specific file header contents",
-        group = "action"
-    )]
-    pub private_headers: bool,
 
     // ── Modificatori ─────────────────────────────────────────────────────────
     #[arg(
@@ -179,6 +180,29 @@ pub struct Config {
         help = "Print an IDA Pro-style header before each section listing"
     )]
     pub ida_header: bool,
+
+    #[arg(
+        long = "cfg",
+        help = "Build and print the Control Flow Graph of executable sections",
+        group = "action"
+    )]
+    pub build_cfg: bool,
+
+    #[arg(
+        long = "cfg-dot",
+        value_name = "FILE",
+        help = "Export CFG as Graphviz DOT file (e.g. --cfg-dot=out.dot)",
+        group = "action"
+    )]
+    pub cfg_dot: Option<PathBuf>,
+
+    #[arg(
+        long = "backend",
+        value_name = "BACKEND",
+        default_value = "iced",
+        help = "Decoder backend to use for CFG construction [iced|zydis]"
+    )]
+    pub backend: BackendKind,
 }
 
 impl Config {

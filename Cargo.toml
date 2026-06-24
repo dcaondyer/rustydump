@@ -1,11 +1,12 @@
 [package]
 name = "rustydump"
-version = "0.3.2"
+version = "0.4.2"
 edition = "2024"
 
 [dependencies]
 colored = "3.1.1"
 iced-x86 = "1.21.0"
+zydis = "4.1.1"
 goblin = "0.10.7"
 clap = { version = "4.6.1", features = ["derive"] }
 rustc-demangle = "0.1.27"

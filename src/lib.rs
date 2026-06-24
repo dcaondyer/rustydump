@@ -9,6 +9,7 @@ pub mod header;
 pub mod output;
 pub mod symbols;
 
+use crate::analysis::construct_cfg;
 use crate::config::Config;
 use crate::disasm::disasm;
 use crate::formats::{
@@ -53,6 +54,29 @@ pub fn process_file(file: &PathBuf, config: &Config) -> Result<(), Box<dyn Error
             print_ida_file_header(&bytes, file)?;
         }
         disassemble(&bytes, config, symbols::build_symbol_map(&bytes))?;
+    }
+
+    if config.build_cfg || config.cfg_dot.is_some() {
+        let bitness = detect_bitness(&bytes);
+        let sections: Vec<ExecutableSection> = match Object::parse(&bytes)? {
+            Object::PE(_) => PeFormat::parse(&bytes)?,
+            Object::Elf(_) => ElfFormat::parse(&bytes)?,
+            Object::Mach(_) => MachoFormat::parse(&bytes)?,
+            _ => vec![],
+        };
+
+        for section in &sections {
+            println!("\nCFG for section: {}", section.name);
+
+            // Se --cfg-dot, costruisci path per-sezione: out.dot → out_text.dot
+            let dot_path = config.cfg_dot.as_ref().map(|base| {
+                let stem = base.file_stem().unwrap_or_default().to_string_lossy();
+                let safe = section.name.replace(['.', '/'], "_");
+                base.with_file_name(format!("{}_{}.dot", stem, safe))
+            });
+
+            construct_cfg(section, bitness, config.backend, dot_path.as_deref())?;
+        }
     }
 
     Ok(())
