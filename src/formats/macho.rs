@@ -1,4 +1,4 @@
-use super::{BinaryFormat, ExecutableSection};
+use super::{BinaryFormat, ExecutableFormat, ExecutableSection};
 use goblin::mach::{Mach, MachO, SingleArch};
 use std::error::Error;
 
@@ -49,8 +49,9 @@ fn parse_macho(macho: &MachO, bytes: &[u8]) -> Result<Vec<ExecutableSection>, Bo
 
             // Flags: S_ATTR_PURE_INSTRUCTIONS = 0x8000_0000
             //        S_ATTR_SOME_INSTRUCTIONS = 0x0040_0000
-            let flags = section.flags;
-            let is_executable = flags & 0x8000_0000 != 0 || flags & 0x0040_0000 != 0;
+            let section_flags = section.flags;
+            let is_executable =
+                section_flags & 0x8000_0000 != 0 || section_flags & 0x0040_0000 != 0;
 
             // Includi sempre __text anche se i flag non sono settati
             let is_text = sect_name == "__text";
@@ -59,14 +60,17 @@ fn parse_macho(macho: &MachO, bytes: &[u8]) -> Result<Vec<ExecutableSection>, Bo
                 continue;
             }
 
-            let offset = section.offset as usize;
-            let size = section.size as usize;
+            let offset = section.offset as u64;
+            let size = section.size as u64;
+
+            let offset_usize = offset as usize;
+            let size_usize = size as usize;
 
             if size == 0 {
                 continue;
             }
 
-            if offset + size > bytes.len() {
+            if offset_usize + size_usize > bytes.len() {
                 eprintln!(
                     "Section '{}/{}' out of bounds (offset: {}, size: {}), skip...",
                     seg_name, sect_name, offset, size
@@ -74,14 +78,24 @@ fn parse_macho(macho: &MachO, bytes: &[u8]) -> Result<Vec<ExecutableSection>, Bo
                 continue;
             }
 
-            let data = bytes[offset..offset + size].to_vec();
+            let data = bytes[offset_usize..offset_usize + size_usize].to_vec();
             let virtual_address = section.addr;
             let name = format!("{}/{}", seg_name, sect_name);
+
+            let section_flags = if section_flags != 0 {
+                Some(section_flags as u64)
+            } else {
+                None
+            };
 
             sections.push(ExecutableSection {
                 name,
                 data,
                 virtual_address,
+                offset,
+                size,
+                section_flags,
+                object_format: Some(ExecutableFormat::MachO),
             });
         }
     }

@@ -1,9 +1,11 @@
+use crate::demangle::DemangleStyle;
+use clap::{ArgGroup, Parser};
 use std::path::PathBuf;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 /// Corrisponde ai flag -M di objdump per il dialetto assembly
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum InstructionFormat {
     #[default]
     Intel,
@@ -12,216 +14,199 @@ pub enum InstructionFormat {
     Nasm,
 }
 
+impl std::str::FromStr for InstructionFormat {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "intel" => Ok(Self::Intel),
+            "att" | "gas" => Ok(Self::Gas),
+            "masm" => Ok(Self::Masm),
+            "nasm" => Ok(Self::Nasm),
+            other => Err(format!(
+                "unknown dialect '{other}'. Valid values: intel, att, masm, nasm"
+            )),
+        }
+    }
+}
+
 /// Tutte le opzioni, una per flag come il vero objdump
-#[derive(Debug, Default)]
+#[derive(Parser, Debug)]
+#[command(
+     name    = "rustydump",
+     version = {VERSION},
+     about   = "Display information from object files (objdump clone)",
+     long_about = None,
+     // Almeno una action richiesta, come nel vero objdump
+     group = ArgGroup::new("action")
+         .args([
+             "disassemble", "disassemble_all", "file_headers",
+             "section_headers", "all_headers", "full_contents",
+             "syms", "dynamic_syms", "private_headers",
+         ])
+         .required(true)
+         .multiple(true),
+)]
 pub struct Config {
-    // Azioni (almeno una richiesta, come in objdump)
-    pub disassemble: bool,     // -d / --disassemble
-    pub disassemble_all: bool, // -D / --disassemble-all
-    pub file_headers: bool,    // -f / --file-headers
-    pub section_headers: bool, // -h / --section-headers / --headers
-    pub all_headers: bool,     // -x / --all-headers
-    pub full_contents: bool,   // -s / --full-contents
-    pub syms: bool,            // -t / --syms
-    pub dynamic_syms: bool,    // -T / --dynamic-syms
-    pub private_headers: bool, // -p / --private-headers
-
-    // Modificatori
-    pub demangle: bool,                  // -C / --demangle
-    pub source: bool,                    // -S / --source
-    pub adjust_vma: u64,                 // --adjust-vma=<offset>
-    pub section_filter: Option<String>,  // -j <section> / --section=<name>
-    pub instr_format: InstructionFormat, // -M intel / -M att / ecc.
-
-    // Input
+    // ── File di input ─────────────────────────────────────────────────────────
+    #[arg(
+        value_name = "FILE",
+        required = true,
+        help = "Object file(s) to examine"
+    )]
     pub files: Vec<PathBuf>,
+
+    // ── Azioni ───────────────────────────────────────────────────────────────
+    #[arg(
+        short = 'd',
+        long = "disassemble",
+        help = "Disassemble executable sections",
+        group = "action"
+    )]
+    pub disassemble: bool,
+
+    #[arg(
+        short = 'D',
+        long = "disassemble-all",
+        help = "Disassemble all sections",
+        group = "action"
+    )]
+    pub disassemble_all: bool,
+
+    #[arg(
+        short = 'f',
+        long = "file-headers",
+        help = "Display the contents of the overall file header",
+        group = "action"
+    )]
+    pub file_headers: bool,
+
+    #[arg(
+        short = 'h',
+        long = "section-headers",
+        visible_alias = "headers",
+        help = "Display the contents of the section headers",
+        group = "action"
+    )]
+    pub section_headers: bool,
+
+    #[arg(
+        short = 'x',
+        long = "all-headers",
+        help = "Display all available header information (-f -h -p -t combined)",
+        group = "action"
+    )]
+    pub all_headers: bool,
+
+    #[arg(
+        short = 's',
+        long = "full-contents",
+        help = "Display the full contents of all sections (hex dump)",
+        group = "action"
+    )]
+    pub full_contents: bool,
+
+    #[arg(
+        short = 't',
+        long = "syms",
+        help = "Display the symbol table",
+        group = "action"
+    )]
+    pub syms: bool,
+
+    #[arg(
+        short = 'T',
+        long = "dynamic-syms",
+        help = "Display the dynamic symbol table",
+        group = "action"
+    )]
+    pub dynamic_syms: bool,
+
+    #[arg(
+        short = 'p',
+        long = "private-headers",
+        help = "Display format-specific file header contents",
+        group = "action"
+    )]
+    pub private_headers: bool,
+
+    // ── Modificatori ─────────────────────────────────────────────────────────
+    #[arg(
+        short = 'S',
+        long = "source",
+        help = "Intermix source code with disassembly (implies -d)"
+    )]
+    pub source: bool,
+
+    #[arg(
+        short = 'j',
+        long = "section",
+        value_name = "NAME",
+        help = "Only display information for section NAME"
+    )]
+    pub section_filter: Option<String>,
+
+    #[arg(
+        short = 'M',
+        long = "disassembler-options",
+        value_name = "OPT",
+        default_value = "intel",
+        help = "Pass target specific information to the disassembler [intel|att|masm|nasm]"
+    )]
+    pub instr_format: InstructionFormat,
+
+    #[arg(
+        long  = "adjust-vma",
+        value_name = "OFFSET",
+        default_value = "0",
+        value_parser = parse_hex_or_dec,
+        help  = "Add OFFSET to all displayed section addresses",
+    )]
+    pub adjust_vma: u64,
+
+    #[arg(
+        short = 'C',
+        long  = "demangle",
+        value_name = "STYLE",
+        num_args = 0..=1,           // -C da solo oppure -C=rust / -C=cpp
+        default_value = "none",
+        default_missing_value = "auto",
+        help  = "Decode symbol names [auto|rust|cpp|none]",
+    )]
+    pub demangle: DemangleStyle,
+
+    #[arg(
+        long = "ida-header",
+        help = "Print an IDA Pro-style header before each section listing"
+    )]
+    pub ida_header: bool,
 }
 
 impl Config {
-    pub fn build(args: &[String]) -> Result<Config, String> {
-        let mut cfg = Config::default();
-        let mut i = 1; // salta argv[0]
-
-        if args.len() < 2 {
-            return Err("No file specified.".into());
+    /// Espande -x in tutti i flag che implica, come fa il vero objdump.
+    /// Va chiamata dopo il parsing di clap.
+    pub fn normalize(&mut self) {
+        if self.all_headers {
+            self.file_headers = true;
+            self.section_headers = true;
+            self.private_headers = true;
+            self.syms = true;
         }
-
-        while i < args.len() {
-            let arg = &args[i];
-
-            match arg.as_str() {
-                // ── Aiuto / versione ───────────────────────────────────────
-                "-H" | "--help" => {
-                    print_help();
-                    std::process::exit(0);
-                }
-                "-V" | "--version" => {
-                    println!("rustydump {} (iced-x86 + goblin)", VERSION);
-                    std::process::exit(0);
-                }
-
-                // ── Azioni ─────────────────────────────────────────────────
-                "-d" | "--disassemble" => cfg.disassemble = true,
-                "-D" | "--disassemble-all" => cfg.disassemble_all = true,
-                "-f" | "--file-headers" => cfg.file_headers = true,
-                "-s" | "--full-contents" => cfg.full_contents = true,
-                "-t" | "--syms" => cfg.syms = true,
-                "-T" | "--dynamic-syms" => cfg.dynamic_syms = true,
-                "-p" | "--private-headers" => cfg.private_headers = true,
-                "-C" | "--demangle" => cfg.demangle = true,
-                "-S" | "--source" => {
-                    cfg.source = true;
-                    cfg.disassemble = true;
-                }
-
-                // -h / -x espandono entrambi all_headers / section_headers
-                "-h" | "--section-headers" | "--headers" => cfg.section_headers = true,
-                "-x" | "--all-headers" => {
-                    cfg.all_headers = true;
-                    cfg.file_headers = true;
-                    cfg.section_headers = true;
-                    cfg.private_headers = true;
-                    cfg.syms = true;
-                }
-
-                // ── Modificatori con valore ────────────────────────────────
-                "-j" | "--section" => {
-                    i += 1;
-                    cfg.section_filter = Some(next_arg(args, i, "-j")?);
-                }
-                "-M" | "--disassembler-options" => {
-                    i += 1;
-                    let opt = next_arg(args, i, "-M")?;
-                    cfg.instr_format = parse_m_flag(&opt)?;
-                }
-                "--adjust-vma" => {
-                    i += 1;
-                    let val = next_arg(args, i, "--adjust-vma")?;
-                    cfg.adjust_vma = parse_hex_or_dec(&val)
-                        .map_err(|_| format!("--adjust-vma: value not valid '{val}'"))?;
-                }
-
-                // ── Forma --flag=valore ────────────────────────────────────
-                s if s.starts_with("--section=") => {
-                    cfg.section_filter = Some(s["--section=".len()..].to_string());
-                }
-                s if s.starts_with("-M") && s.len() > 2 => {
-                    cfg.instr_format = parse_m_flag(&s[2..])?;
-                }
-                s if s.starts_with("--adjust-vma=") => {
-                    let val = &s["--adjust-vma=".len()..];
-                    cfg.adjust_vma = parse_hex_or_dec(val)
-                        .map_err(|_| format!("--adjust-vma: value not valid '{val}'"))?;
-                }
-                s if s.starts_with("--disassembler-options=") => {
-                    let opt = &s["--disassembler-options=".len()..];
-                    cfg.instr_format = parse_m_flag(opt)?;
-                }
-
-                // ── Raggruppamento flag corti (-dhs, -dM intel) ────────────
-                s if s.starts_with('-') && !s.starts_with("--") && s.len() > 2 => {
-                    // Espandi "-dhf" in "-d", "-h", "-f"
-                    let expanded: Vec<String> = s[1..].chars().map(|c| format!("-{c}")).collect();
-                    // Reinserisci all'inizio della coda (ricorsione piatta)
-                    let mut new_args: Vec<String> = args[..i].to_vec();
-                    new_args.extend(expanded);
-                    new_args.extend_from_slice(&args[i + 1..]);
-                    return Config::build(&new_args);
-                }
-
-                // ── File di input ──────────────────────────────────────────
-                s => cfg.files.push(PathBuf::from(s)),
-            }
-
-            i += 1;
+        if self.source {
+            self.disassemble = true;
         }
-
-        if cfg.files.is_empty() {
-            return Err("No file specified".into());
-        }
-
-        if !cfg.has_action() {
-            return Err(
-                "At least one of -a -d -D -f -h -p -s -S -t -T -V -x must be specified".into(),
-            );
-        }
-
-        Ok(cfg)
-    }
-
-    fn has_action(&self) -> bool {
-        self.disassemble
-            || self.disassemble_all
-            || self.file_headers
-            || self.section_headers
-            || self.all_headers
-            || self.full_contents
-            || self.syms
-            || self.dynamic_syms
-            || self.private_headers
     }
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
-fn next_arg(args: &[String], i: usize, flag: &str) -> Result<String, String> {
-    args.get(i)
-        .cloned()
-        .ok_or_else(|| format!("'{flag}' requires an argument"))
-}
+// ── Value parser per --adjust-vma (accetta sia hex che decimale) ──────────────
 
-fn parse_m_flag(opt: &str) -> Result<InstructionFormat, String> {
-    match opt.to_lowercase().as_str() {
-        "intel" => Ok(InstructionFormat::Intel),
-        "att" | "gas" => Ok(InstructionFormat::Gas),
-        "masm" => Ok(InstructionFormat::Masm),
-        "nasm" => Ok(InstructionFormat::Nasm),
-        other => Err(format!(
-            "-M: unknown option '{other}'. Values: intel, att, masm, nasm"
-        )),
-    }
-}
-
-fn parse_hex_or_dec(s: &str) -> Result<u64, ()> {
+fn parse_hex_or_dec(s: &str) -> Result<u64, String> {
     let s = s.trim().replace('_', "");
     if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        u64::from_str_radix(hex, 16).map_err(|_| ())
+        u64::from_str_radix(hex, 16).map_err(|_| format!("'{s}' is not a valid hex number"))
     } else {
-        s.parse::<u64>().map_err(|_| ())
+        s.parse::<u64>()
+            .map_err(|_| format!("'{s}' is not a valid hex number"))
     }
-}
-
-pub fn print_help() {
-    println!("Usage: rustydump <options> <file...>");
-    println!();
-    println!("Print information from object files");
-    println!("At least one of these options is required:");
-    println!();
-    println!(" -d, --disassemble        Disassembly executable sections");
-    println!(" -D, --disassemble-all    Disassembly all sections");
-    println!(" -f, --file-headers       Print file header");
-    println!(" -h, --section-headers    Print sections headers");
-    println!(" -p, --private-headers    Print specific format headers");
-    println!(" -s, --full-contents      Print hex content of all sections");
-    println!(" -t, --syms               Print symbol table");
-    println!(" -T, --dynamic-syms       Print dynamic symbol table");
-    println!(" -x, --all-headers        Equals to -d -f -h -p -t combined");
-    println!();
-    println!("Modifiers:");
-    println!(" -j, --section=<nome>     Limits output to specified section");
-    println!(" -M, --disassembler-options=<opt>");
-    println!("                          intel (default) | att | masm | nasm");
-    println!(" -C, --demangle           Decode C++ symbols names");
-    println!(" -S, --source             Print source code mixed with disassembly");
-    println!("     --adjust-vma=<off>   Ad offset to sections addresses");
-    println!();
-    println!(" -H, --help               Print these message");
-    println!(" -V, --version            Print version");
-    println!();
-    println!("Examples:");
-    println!("  rustydump -d ./binary");
-    println!("  rustydump -d -M intel ./binary");
-    println!("  rustydump -d -j .text ./binary");
-    println!("  rustydump -f -h ./binary");
-    println!("  rustydump -x ./binary");
 }

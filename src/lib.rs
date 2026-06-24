@@ -1,13 +1,19 @@
 pub mod config;
+pub mod demangle;
 pub mod disasm;
 pub mod formats;
+pub mod header;
 pub mod output;
+pub mod symbols;
 
 use crate::config::Config;
 use crate::disasm::disasm;
 use crate::formats::{
     elf::ElfFormat, macho::MachoFormat, pe::PeFormat, BinaryFormat, ExecutableSection,
 };
+use crate::header::print_ida_file_header;
+use crate::symbols::SymbolMap;
+use goblin::mach::{Mach, SingleArch};
 use goblin::Object;
 use std::error::Error;
 use std::fs;
@@ -40,7 +46,8 @@ pub fn process_file(file: &PathBuf, config: &Config) -> Result<(), Box<dyn Error
         print_full_contents(&bytes, config.section_filter.as_deref())?;
     }
     if config.disassemble || config.disassemble_all {
-        disassemble(&bytes, config)?;
+        print_ida_file_header(&bytes, file)?;
+        disassemble(&bytes, config, symbols::build_symbol_map(&bytes))?;
     }
 
     Ok(())
@@ -71,31 +78,76 @@ fn detect_format_name(bytes: &[u8]) -> &'static str {
 
 // ── -f / --file-headers ───────────────────────────────────────────────────
 
+struct FileHeader {
+    arch: &'static str,
+    flags: u32,
+    start_address: u64,
+}
+
+impl FileHeader {
+    fn from_bytes(bytes: &[u8]) -> Result<Self, Box<dyn Error>> {
+        match Object::parse(bytes)? {
+            Object::Elf(elf) => Ok(Self {
+                arch: if elf.is_64 { "i386:x86-64" } else { "i386" },
+                flags: elf.header.e_flags,
+                start_address: elf.entry,
+            }),
+            Object::PE(pe) => Ok(Self {
+                arch: if pe.is_64 { "i386:x86-64" } else { "i386" },
+                flags: pe.header.coff_header.characteristics as u32,
+                start_address: pe.entry as u64 + pe.image_base as u64,
+            }),
+            Object::Mach(mach) => {
+                let (flags, start_address, arch) = match mach {
+                    Mach::Binary(m) => (
+                        m.header.flags,
+                        m.entry,
+                        if m.is_64 { "i386:x86-64" } else { "i386" },
+                    ),
+                    Mach::Fat(fat) => {
+                        // Prendi la prima architettura disponibile per i metadati
+                        let first = fat.into_iter().filter_map(|a| a.ok()).find_map(|a| {
+                            if let SingleArch::MachO(m) = a {
+                                Some(m)
+                            } else {
+                                None
+                            }
+                        });
+                        match first {
+                            Some(m) => (
+                                m.header.flags,
+                                m.entry,
+                                if m.is_64 {
+                                    "i386:x86-64 (fat)"
+                                } else {
+                                    "i386 (fat)"
+                                },
+                            ),
+                            None => (0u32, 0u64, "unknown (fat)"),
+                        }
+                    }
+                };
+                Ok(Self {
+                    arch,
+                    flags,
+                    start_address,
+                })
+            }
+            _ => Err("Unsupported format".into()),
+        }
+    }
+}
+
 fn print_file_headers(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn Error>> {
     println!();
-    match Object::parse(bytes)? {
-        Object::Elf(elf) => {
-            let arch = if elf.is_64 { "i386:x86-64" } else { "i386" };
-            println!("{}", file.display());
-            println!("architecture: {arch}, flags 0x{:08x}:", 0u32);
-            println!("start address 0x{:016x}", elf.entry);
+    match FileHeader::from_bytes(bytes) {
+        Ok(hdr) => {
+            println!("{}:", file.display());
+            println!("architecture: {}", hdr.arch);
+            println!("flags:        0x{:08x}", hdr.flags);
+            println!("start address 0x{:016x}", hdr.start_address);
         }
-        Object::PE(pe) => {
-            let arch = if pe.is_64 { "i386:x86-64" } else { "i386" };
-            println!("architecture: {arch}");
-            println!(
-                "start address 0x{:016x}",
-                pe.entry as u64 + pe.image_base as u64
-            );
-        }
-        Object::Mach(mach) => {
-            println!("architecture: mach-o");
-            use goblin::mach::Mach;
-            if let Mach::Binary(m) = mach {
-                println!("start address 0x{:016x}", m.entry);
-            }
-        }
-        _ => println!("(header not present)"),
+        Err(_) => println!("(header not present)"),
     }
     Ok(())
 }
@@ -145,7 +197,6 @@ fn print_section_headers(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
             }
         }
         Object::Mach(mach) => {
-            use goblin::mach::Mach;
             if let Mach::Binary(m) = mach {
                 let mut idx = 0;
                 for seg in m.segments.iter() {
@@ -217,7 +268,6 @@ fn print_private_headers(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
             }
         }
         Object::Mach(mach) => {
-            use goblin::mach::Mach;
             if let Mach::Binary(m) = mach {
                 println!("Load commands: {}", m.load_commands.len());
                 for lc in &m.load_commands {
@@ -237,6 +287,9 @@ fn print_symbol_table(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     println!("SYMBOL TABLE:");
     match Object::parse(bytes)? {
         Object::Elf(elf) => {
+            if elf.syms.iter().len() == 0 {
+                println!("(symbol table is empty)");
+            }
             for sym in elf.syms.iter() {
                 let name = elf.strtab.get_at(sym.st_name).unwrap_or("?");
                 let bind = if sym.st_bind() == 1 { "g" } else { "l" };
@@ -253,21 +306,37 @@ fn print_symbol_table(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
             }
         }
         Object::PE(pe) => {
+            if pe.exports.len() == 0 {
+                println!("(symbol table is empty)");
+            }
             for sym in &pe.exports {
                 println!(
                     "{:016x} g F {:016x} {}",
                     sym.rva as u64 + pe.image_base as u64,
-                    0u64,
+                    sym.size as u64,
                     sym.name.unwrap_or("?")
                 );
             }
         }
         Object::Mach(mach) => {
-            use goblin::mach::Mach;
             if let Mach::Binary(m) = mach {
-                for sym in m.symbols().flatten() {
-                    let (name, nlist) = sym;
-                    println!("{:016x}   {:016x} {}", nlist.n_value, 0u64, name);
+                match &m.symbols {
+                    None => println!("(symbol table is empty)"),
+                    Some(symbols) => {
+                        let syms: Vec<_> = symbols
+                            .into_iter()
+                            .filter_map(|res| res.ok()) // scarta gli Err
+                            .filter(|(name, _)| !name.is_empty())
+                            .collect();
+
+                        if syms.is_empty() {
+                            println!("(symbol table is empty)");
+                        } else {
+                            for (name, nlist) in syms {
+                                println!("{:016x}   {:016x} {}", nlist.n_value, 0u64, name);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -283,6 +352,9 @@ fn print_dynamic_syms(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     println!("DYNAMIC SYMBOL TABLE:");
     match Object::parse(bytes)? {
         Object::Elf(elf) => {
+            if elf.dynsyms.iter().len() == 0 {
+                println!("(dynamic symbol table is empty)");
+            }
             for sym in elf.dynsyms.iter() {
                 let name = elf.dynstrtab.get_at(sym.st_name).unwrap_or("?");
                 let bind = if sym.st_bind() == 1 { "g" } else { "l" };
@@ -293,11 +365,59 @@ fn print_dynamic_syms(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
             }
         }
         Object::PE(pe) => {
+            if pe.imports.len() == 0 {
+                println!("(dynamic symbol table is empty)");
+            }
             for import in &pe.imports {
                 println!(
-                    "{:016x} g F 0000000000000000 {}",
-                    import.rva as u64, import.name
+                    "{:016x} g F {:016x} {}",
+                    import.rva as u64, import.size, import.name
                 );
+            }
+        }
+        Object::Mach(mach) => {
+            if let Mach::Binary(m) = mach {
+                // Export trie — più affidabile per i simboli dinamici
+                match m.exports() {
+                    Err(_) => println!("(dynamic exports symbol table is empty)"),
+                    Ok(exports) => {
+                        if exports.is_empty() {
+                            println!("(dynamic exports symbol table is empty)");
+                        } else {
+                            for export in exports {
+                                if export.size != 0 {
+                                    println!(
+                                        "{:016x}   {:016x} {}",
+                                        export.offset,
+                                        0u64,
+                                        export.name.to_string()
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Import — simboli dinamici da librerie esterne
+                match m.imports() {
+                    Err(_) => println!("(dynamic symbol table is empty)"),
+                    Ok(imports) => {
+                        if imports.is_empty() {
+                            println!("(dynamic symbol table is empty)");
+                        } else {
+                            for import in imports {
+                                if import.size != 0 {
+                                    println!(
+                                        "{:016x}   {:016x} {}",
+                                        import.offset,
+                                        0u64,
+                                        import.name.to_string()
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         _ => println!("(dynamic symbol table not present)"),
@@ -369,7 +489,7 @@ fn print_hex_dump(name: &str, base_addr: u64, data: &[u8]) {
 
 // ── -d / -D / --disassemble ───────────────────────────────────────────────
 
-fn disassemble(bytes: &[u8], config: &Config) -> Result<(), Box<dyn Error>> {
+fn disassemble(bytes: &[u8], config: &Config, symbols: SymbolMap) -> Result<(), Box<dyn Error>> {
     let filter = config.section_filter.as_deref();
 
     let sections: Vec<ExecutableSection> = match Object::parse(bytes)? {
@@ -400,6 +520,10 @@ fn disassemble(bytes: &[u8], config: &Config) -> Result<(), Box<dyn Error>> {
                 name: "<raw>".into(),
                 data: bytes.to_vec(),
                 virtual_address: config.adjust_vma,
+                offset: 0u64,
+                size: 0u64,
+                section_flags: None,
+                object_format: None,
             }]
         }
         _ => {
@@ -423,7 +547,15 @@ fn disassemble(bytes: &[u8], config: &Config) -> Result<(), Box<dyn Error>> {
         // Label iniziale identica a objdump: "0000000000401000 <.text>:"
         println!("{:016x} <{}>:", section.virtual_address, section.name);
         let rip = section.virtual_address + config.adjust_vma;
-        disasm(bitness, &section.data, rip, &config.instr_format);
+        disasm(
+            bitness,
+            &section,
+            rip,
+            &config.instr_format,
+            config.demangle, // DemangleStyle::None se -C non passato
+            &symbols,
+            config.ida_header,
+        );
     }
 
     Ok(())
