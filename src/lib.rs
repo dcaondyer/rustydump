@@ -6,8 +6,9 @@ pub mod detection;
 pub mod disasm;
 pub mod formats;
 pub mod header;
-pub mod output;
+pub mod iced;
 pub mod symbols;
+pub mod zydis;
 
 use crate::analysis::construct_cfg;
 use crate::config::Config;
@@ -584,6 +585,7 @@ fn disassemble(bytes: &[u8], config: &Config, symbols: SymbolMap) -> Result<(), 
             config.demangle, // DemangleStyle::None se -C non passato
             &symbols,
             config.ida_header,
+            config.decoder,
         );
     }
 

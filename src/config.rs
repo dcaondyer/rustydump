@@ -1,5 +1,6 @@
 use crate::decode::BackendKind;
 use crate::demangle::DemangleStyle;
+use crate::disasm::DecoderKind;
 use clap::{ArgGroup, Parser};
 use std::path::PathBuf;
 
@@ -156,6 +157,13 @@ pub struct Config {
     pub instr_format: InstructionFormat,
 
     #[arg(
+        short = 'I',
+        long = "ida-header",
+        help = "Print an IDA Pro-style header before each section and function listing"
+    )]
+    pub ida_header: bool,
+
+    #[arg(
         long  = "adjust-vma",
         value_name = "OFFSET",
         default_value = "0",
@@ -176,10 +184,13 @@ pub struct Config {
     pub demangle: DemangleStyle,
 
     #[arg(
-        long = "ida-header",
-        help = "Print an IDA Pro-style header before each section and function listing"
+        short = 'B',
+        long = "decoder",
+        value_name = "DECODER",
+        default_value = "iced",
+        help = "Decoder backend to use for disassembly"
     )]
-    pub ida_header: bool,
+    pub decoder: DecoderKind,
 
     #[arg(
         long = "cfg",
