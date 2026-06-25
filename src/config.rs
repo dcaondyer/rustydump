@@ -6,7 +6,7 @@ use std::path::PathBuf;
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 /// Corrisponde ai flag -M di objdump per il dialetto assembly
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, clap::ValueEnum)]
 pub enum InstructionFormat {
     #[default]
     Intel,
@@ -151,7 +151,7 @@ pub struct Config {
         long = "disassembler-options",
         value_name = "OPT",
         default_value = "intel",
-        help = "Pass target specific information to the disassembler [intel|att|masm|nasm]"
+        help = "Pass target specific information to the disassembler"
     )]
     pub instr_format: InstructionFormat,
 
@@ -177,7 +177,7 @@ pub struct Config {
 
     #[arg(
         long = "ida-header",
-        help = "Print an IDA Pro-style header before each section listing"
+        help = "Print an IDA Pro-style header before each section and function listing"
     )]
     pub ida_header: bool,
 
@@ -200,7 +200,7 @@ pub struct Config {
         long = "backend",
         value_name = "BACKEND",
         default_value = "iced",
-        help = "Decoder backend to use for CFG construction [iced|zydis]"
+        help = "Decoder backend to use for CFG construction"
     )]
     pub backend: BackendKind,
 }
