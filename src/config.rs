@@ -6,7 +6,6 @@ use std::path::PathBuf;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-/// Corrisponde ai flag -M di objdump per il dialetto assembly
 #[derive(Debug, Clone, Copy, Default, PartialEq, clap::ValueEnum)]
 pub enum InstructionFormat {
     #[default]
@@ -31,14 +30,14 @@ impl std::str::FromStr for InstructionFormat {
     }
 }
 
-/// Tutte le opzioni, una per flag come il vero objdump
 #[derive(Parser, Debug)]
 #[command(
      name    = "rustydump",
      version = {VERSION},
-     about   = "Display information from object files (objdump clone)",
-     long_about = None,
-     // Almeno una action richiesta, come nel vero objdump
+     about   = "Display, analyze and disassemble object files",
+     long_about = "Rustydump is a modern, objdump-compatible binary analysis tool written in Rust for i386 and amd64.
+It supports disassembly, symbol inspection, section/header parsing, and control-flow graph generation [EXPERIMENTAL] for multiple object file formats.
+It features selectable disassembly backends (iced-x86 and Zydis) and optional IDA-style enhanced output including labels and cross-references.",
      group = ArgGroup::new("action")
          .args([
              "disassemble", "disassemble_all", "file_headers",
@@ -49,7 +48,6 @@ impl std::str::FromStr for InstructionFormat {
          .multiple(true),
 )]
 pub struct Config {
-    // ── File di input ─────────────────────────────────────────────────────────
     #[arg(
         value_name = "FILE",
         required = true,
@@ -57,7 +55,6 @@ pub struct Config {
     )]
     pub files: Vec<PathBuf>,
 
-    // ── Azioni ───────────────────────────────────────────────────────────────
     #[arg(
         short = 'd',
         long = "disassemble",
@@ -131,7 +128,6 @@ pub struct Config {
     )]
     pub dynamic_syms: bool,
 
-    // ── Modificatori ─────────────────────────────────────────────────────────
     #[arg(
         short = 'S',
         long = "source",
@@ -215,7 +211,7 @@ pub struct Config {
 
     #[arg(
         long = "cfg",
-        help = "Build and print the Control Flow Graph of executable sections",
+        help = "Build and print the Control Flow Graph of executable sections [EXPERIMENTAL]",
         group = "action"
     )]
     pub build_cfg: bool,
@@ -223,23 +219,21 @@ pub struct Config {
     #[arg(
         long = "cfg-dot",
         value_name = "FILE",
-        help = "Export CFG as Graphviz DOT file (e.g. --cfg-dot=out.dot)",
+        help = "Export CFG as Graphviz DOT file (e.g. --cfg-dot=out.dot) [EXPERIMENTAL]",
         group = "action"
     )]
     pub cfg_dot: Option<PathBuf>,
 
     #[arg(
-        long = "backend",
+        long = "cfg-backend",
         value_name = "BACKEND",
         default_value = "iced",
-        help = "Decoder backend to use for CFG construction"
+        help = "Decoder backend to use for CFG construction [EXPERIMENTAL]"
     )]
     pub backend: BackendKind,
 }
 
 impl Config {
-    /// Espande -x in tutti i flag che implica, come fa il vero objdump.
-    /// Va chiamata dopo il parsing di clap.
     pub fn normalize(&mut self) {
         if self.all_headers {
             self.file_headers = true;
@@ -260,10 +254,6 @@ impl Config {
         }
     }
 }
-
-// ── Helper ────────────────────────────────────────────────────────────────────
-
-// ── Value parser per --adjust-vma (accetta sia hex che decimale) ──────────────
 
 fn parse_hex_or_dec(s: &str) -> Result<u64, String> {
     let s = s.trim().replace('_', "");

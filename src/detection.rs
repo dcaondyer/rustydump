@@ -182,7 +182,7 @@ fn detect_compilers_ranked(bytes: &[u8]) -> Vec<CompilerMatch> {
         }
     }
 
-    // ordina per score decrescente
+    // Ordina per score decrescente
     results.sort_by(|a, b| b.score.cmp(&a.score));
 
     results

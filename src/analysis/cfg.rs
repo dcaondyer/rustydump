@@ -3,15 +3,10 @@ use crate::decode::{Flow, InstIR};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Write as FmtWrite;
 
-/// Un blocco base: sequenza contigua di istruzioni
-/// che inizia con un leader e termina con un trasferimento di controllo
-
-/// Il grafo di flusso di controllo completo
 pub struct CFG {
     pub blocks: Vec<BasicBlock>,
-    /// Mappa addr → id blocco, per lookup veloce
     pub addr_to_block: HashMap<u64, usize>,
-    pub entry: usize, // id del blocco entry point
+    pub entry: usize,
 }
 
 impl CFG {
@@ -26,7 +21,7 @@ impl CFG {
             };
         }
 
-        // ── Passo 1: identifica i leader ─────────────────────────────────
+        // Passo 1: identifica i leader
         // Un leader è:
         // - la prima istruzione
         // - il target di un salto (condizionale o incondizionale)
@@ -66,7 +61,7 @@ impl CFG {
             }
         }
 
-        // ── Passo 2: partiziona le istruzioni in blocchi base ─────────────
+        // Passo 2: partiziona le istruzioni in blocchi base
         let mut blocks: Vec<BasicBlock> = Vec::new();
         let mut addr_to_block: HashMap<u64, usize> = HashMap::new();
         let mut current_block = BasicBlock::new(0, instructions[0].addr);
@@ -94,7 +89,7 @@ impl CFG {
             blocks.push(current_block);
         }
 
-        // ── Passo 3: collega i blocchi (edges del CFG) ────────────────────
+        // Passo 3: collega i blocchi (edges del CFG)
         // Prima raccogliamo tutti gli edge da aggiungere
         let edges: Vec<(usize, usize)> = blocks
             .iter()
@@ -149,8 +144,7 @@ impl CFG {
         }
     }
 
-    // ── Analisi del CFG ───────────────────────────────────────────────────
-
+    /// Analisi del CFG
     /// Visita in ampiezza (BFS) a partire dall'entry point
     pub fn bfs(&self) -> Vec<usize> {
         let mut visited = vec![false; self.blocks.len()];
@@ -235,8 +229,7 @@ impl CFG {
             .collect()
     }
 
-    // ── Stampa ───────────────────────────────────────────────────────────
-
+    /// Stampa
     pub fn print(&self) {
         for block in &self.blocks {
             println!(

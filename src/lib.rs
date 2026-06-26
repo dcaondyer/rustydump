@@ -83,8 +83,7 @@ pub fn process_file(file: &PathBuf, config: &Config) -> Result<(), Box<dyn Error
     Ok(())
 }
 
-// ── Rilevamento formato ───────────────────────────────────────────────────
-
+/// Rivela il formato del binario
 fn detect_format_name(bytes: &[u8]) -> &'static str {
     match Object::parse(bytes) {
         Ok(Object::Elf(elf)) => {
@@ -106,8 +105,7 @@ fn detect_format_name(bytes: &[u8]) -> &'static str {
     }
 }
 
-// ── -f / --file-headers ───────────────────────────────────────────────────
-
+/// -f / --file-headers
 struct FileHeader {
     arch: &'static str,
     flags: u32,
@@ -182,8 +180,7 @@ fn print_file_headers(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn Error>
     Ok(())
 }
 
-// ── -h / --section-headers ────────────────────────────────────────────────
-
+/// -h / --section-headers
 fn print_section_headers(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     println!();
     println!("Sections:");
@@ -248,8 +245,7 @@ fn print_section_headers(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-// ── -p / --private-headers ────────────────────────────────────────────────
-
+/// -p / --private-headers
 fn print_private_headers(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     println!();
     match Object::parse(bytes)? {
@@ -310,8 +306,7 @@ fn print_private_headers(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-// ── -t / --syms ───────────────────────────────────────────────────────────
-
+/// -t / --syms
 fn print_symbol_table(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     println!();
     println!("SYMBOL TABLE:");
@@ -375,8 +370,7 @@ fn print_symbol_table(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-// ── -T / --dynamic-syms ───────────────────────────────────────────────────
-
+/// -T / --dynamic-syms
 fn print_dynamic_syms(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     println!();
     println!("DYNAMIC SYMBOL TABLE:");
@@ -455,8 +449,7 @@ fn print_dynamic_syms(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-// ── -s / --full-contents ──────────────────────────────────────────────────
-
+///-s / --full-contents
 fn print_full_contents(bytes: &[u8], filter: Option<&str>) -> Result<(), Box<dyn Error>> {
     match Object::parse(bytes)? {
         Object::Elf(elf) => {
@@ -490,7 +483,7 @@ fn print_full_contents(bytes: &[u8], filter: Option<&str>) -> Result<(), Box<dyn
     Ok(())
 }
 
-// Formato hex identico a objdump -s
+/// Formato hex identico a objdump -s
 fn print_hex_dump(name: &str, base_addr: u64, data: &[u8]) {
     println!();
     println!("Contents of section {name}:");
@@ -517,8 +510,7 @@ fn print_hex_dump(name: &str, base_addr: u64, data: &[u8]) {
     }
 }
 
-// ── -d / -D / --disassemble ───────────────────────────────────────────────
-
+/// -d / -D / --disassemble
 fn disassemble(bytes: &[u8], config: &Config, symbols: SymbolMap) -> Result<(), Box<dyn Error>> {
     let filter = config.section_filter.as_deref();
 
@@ -614,8 +606,7 @@ fn detect_bitness(bytes: &[u8]) -> u32 {
     }
 }
 
-// ── Flag helpers ──────────────────────────────────────────────────────────
-
+/// Flag helpers
 fn section_flags_elf(flags: u64) -> String {
     let mut f = String::new();
     if flags & 0x2 != 0 {

@@ -39,8 +39,6 @@ pub fn extract_addr_from_instruction(
         _ => return None,
     };
 
-    // 1. CASO MIGLIORE: branch diretto già risolto dal decoder
-    // Cerca il primo operando che ha un indirizzo calcolabile
     for op in inst.operands() {
         match &op.kind {
             // Operando immediato/branch diretto
@@ -63,7 +61,6 @@ pub fn extract_addr_from_instruction(
         }
     }
 
-    // 2. FALLBACK: immediato puro (JMP/CALL rel32/rel64)
     if let Some(op) = inst
         .operands()
         .iter()

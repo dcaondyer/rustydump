@@ -55,7 +55,6 @@ impl IcedBackend {
             | IcedOpKind::Immediate16
             | IcedOpKind::Immediate32
             | IcedOpKind::Immediate64 => Some(Operand::Imm(instr.immediate64())),
-
             IcedOpKind::Memory => Some(Operand::Mem(IcedBackend::convert_mem(instr))),
 
             _ => None,
@@ -88,21 +87,13 @@ impl IcedBackend {
     fn convert_opcode(instr: &Instruction) -> OpKind {
         match instr.mnemonic() {
             Mnemonic::Mov => OpKind::Mov,
-
             Mnemonic::Add => OpKind::Add,
-
             Mnemonic::Sub => OpKind::Sub,
-
             Mnemonic::Imul | Mnemonic::Mul => OpKind::Mul,
-
             Mnemonic::Div | Mnemonic::Idiv => OpKind::Div,
-
             Mnemonic::Call => OpKind::Call,
-
             Mnemonic::Ret => OpKind::Ret,
-
             Mnemonic::Jmp => OpKind::Jmp,
-
             _ => OpKind::Mov,
         }
     }
@@ -117,7 +108,6 @@ impl IcedBackend {
         }
 
         let dst = ops.first().cloned();
-
         let src = ops.iter().skip(1).cloned().collect();
 
         let (flow, op) = match IcedBackend::convert_flow(instr) {
@@ -137,7 +127,6 @@ impl IcedBackend {
 
     pub fn decode_section_iced(bitness: u32, bytes: &[u8], rip: u64) -> Vec<InstIR> {
         let mut decoder = Decoder::with_ip(bitness, bytes, rip, DecoderOptions::NONE);
-
         let mut out = Vec::new();
 
         for instr in &mut decoder {
