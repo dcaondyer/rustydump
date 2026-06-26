@@ -158,10 +158,31 @@ pub struct Config {
 
     #[arg(
         short = 'I',
+        long = "ida-all",
+        help = "Total IDA Pro-style (-H -J -X combined)"
+    )]
+    pub ida_all: bool,
+
+    #[arg(
+        short = 'H',
         long = "ida-header",
-        help = "Print an IDA Pro-style header before each section and function listing"
+        help = "Print an IDA Pro-style header before each section listing"
     )]
     pub ida_header: bool,
+
+    #[arg(
+        short = 'J',
+        long = "ida-jump",
+        help = "Print IDA Pro-style sub_00000000 and loc_00000000"
+    )]
+    pub ida_jump: bool,
+
+    #[arg(
+        short = 'X',
+        long = "ida-xrefs",
+        help = "Print IDA Pro-style xrefs (implies -J)"
+    )]
+    pub ida_xrefs: bool,
 
     #[arg(
         long  = "adjust-vma",
@@ -228,6 +249,14 @@ impl Config {
         }
         if self.source {
             self.disassemble = true;
+        }
+        if self.ida_all {
+            self.ida_header = true;
+            self.ida_jump = true;
+            self.ida_xrefs = true;
+        }
+        if self.ida_xrefs {
+            self.ida_jump = true;
         }
     }
 }

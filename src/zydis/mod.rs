@@ -85,6 +85,8 @@ pub fn disasm(
     demangle: DemangleStyle,
     symbols: &SymbolMap,
     ida_header: bool,
+    ida_jump: bool,
+    ida_xrefs: bool,
 ) {
     let decoder = make_decoder(code_bitness);
     let formatter = make_formatter(instr_format);
@@ -103,7 +105,9 @@ pub fn disasm(
             &section.object_format,
             true,
         );
+    }
 
+    if ida_jump {
         for item in decoder.decode_all(bytes, code_rip) {
             let (ip, _raw_bytes, inst) = match item {
                 Ok(x) => x,
@@ -121,6 +125,7 @@ pub fn disasm(
                     &mut jmp_target,
                     &mut function_xrefs,
                     &mut jmp_xrefs,
+                    ida_xrefs,
                 );
             }
         }
@@ -132,13 +137,14 @@ pub fn disasm(
             Err(_) => continue,
         };
 
-        if ida_header {
+        if ida_jump {
             print_symbol_or_label(
                 ip,
                 &function_entry,
                 &jmp_target,
                 &function_xrefs,
                 &jmp_xrefs,
+                ida_xrefs,
             );
         }
 
@@ -165,8 +171,8 @@ pub fn disasm(
         //};
 
         // Sostituiamo gli indirizzi numerici con i nomi simbolici colorati
-        // quando ida_header è abilitato.
-        //if ida_header {
+        // quando ida_jump è abilitato.
+        //if ida_jump {
         //    if let Some((addr, jmp_type)) = extract_addr_from_instruction(&inst, ip) {
         //        let sym_colored = if let Some(sym_name) = symbols.get(&addr) {
         //            let name = try_demangle(sym_name, demangle).unwrap_or_else(|| sym_name.clone());
@@ -214,7 +220,7 @@ pub fn disasm(
         let formatted_colored: String =
             match formatter.tokenize::<N>(Some(ip), &inst, &mut buf, None) {
                 Ok(first_token) => {
-                    let branch_info = if ida_header {
+                    let branch_info = if ida_jump {
                         extract_addr_from_instruction(&inst, ip)
                     } else {
                         None

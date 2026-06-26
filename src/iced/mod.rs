@@ -15,7 +15,7 @@ use iced_x86::{
 use std::collections::{BTreeSet, HashMap};
 
 macro_rules! run_disasm {
-    ($formatter:expr, $code_bitness:expr, $section:expr, $code_rip:expr, $demangle:expr, $symbols:expr, $ida_header:expr) => {{
+    ($formatter:expr, $code_bitness:expr, $section:expr, $code_rip:expr, $demangle:expr, $symbols:expr, $ida_header:expr, $ida_jump:expr, $ida_xrefs:expr) => {{
         $formatter.options_mut().set_first_operand_char_index(8);
         let bytes = &$section.data;
         let mut decoder = Decoder::with_ip($code_bitness, bytes, $code_rip, DecoderOptions::NONE);
@@ -34,7 +34,9 @@ macro_rules! run_disasm {
                 &$section.object_format,
                 true,
             );
+        }
 
+        if $ida_jump {
             let mut decoder =
                 Decoder::with_ip($code_bitness, bytes, $code_rip, DecoderOptions::NONE);
             for instruction in &mut decoder {
@@ -58,6 +60,7 @@ macro_rules! run_disasm {
                                     &mut jmp_target,
                                     &mut function_xrefs,
                                     &mut jmp_xrefs,
+                                    $ida_xrefs,
                                 );
                             }
                         }
@@ -73,13 +76,14 @@ macro_rules! run_disasm {
             let offset = (ip - $code_rip) as usize;
             let instr_bytes = &bytes[offset..offset + instruction.len()];
 
-            if $ida_header {
+            if $ida_jump {
                 print_symbol_or_label(
                     ip,
                     &function_entry,
                     &jmp_target,
                     &function_xrefs,
                     &jmp_xrefs,
+                    $ida_xrefs,
                 );
             }
 
@@ -104,7 +108,7 @@ macro_rules! run_disasm {
             for (text, kind) in output.vec.iter() {
                 // Per gli indirizzi (label o function address), prova a sostituire
                 // con il nome del simbolo se disponibile
-                let colored = if $ida_header {
+                let colored = if $ida_jump {
                     match kind {
                         FormatterTextKind::LabelAddress | FormatterTextKind::FunctionAddress => {
                             let addr =
@@ -155,6 +159,8 @@ pub fn disasm(
     demangle: DemangleStyle,
     symbols: &SymbolMap, // mappa addr → nome simbolo
     ida_header: bool,
+    ida_jump: bool,
+    ida_xrefs: bool,
 ) {
     match instr_format {
         InstructionFormat::Intel => run_disasm!(
@@ -164,7 +170,9 @@ pub fn disasm(
             code_rip,
             demangle,
             symbols,
-            ida_header
+            ida_header,
+            ida_jump,
+            ida_xrefs
         ),
         InstructionFormat::Gas => run_disasm!(
             GasFormatter::new(),
@@ -173,7 +181,9 @@ pub fn disasm(
             code_rip,
             demangle,
             symbols,
-            ida_header
+            ida_header,
+            ida_jump,
+            ida_xrefs
         ),
         InstructionFormat::Masm => run_disasm!(
             MasmFormatter::new(),
@@ -182,7 +192,9 @@ pub fn disasm(
             code_rip,
             demangle,
             symbols,
-            ida_header
+            ida_header,
+            ida_jump,
+            ida_xrefs
         ),
         InstructionFormat::Nasm => run_disasm!(
             NasmFormatter::new(),
@@ -191,7 +203,9 @@ pub fn disasm(
             code_rip,
             demangle,
             symbols,
-            ida_header
+            ida_header,
+            ida_jump,
+            ida_xrefs
         ),
     }
 }

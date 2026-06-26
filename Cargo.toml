@@ -1,6 +1,6 @@
 [package]
 name = "rustydump"
-version = "0.9.3"
+version = "0.9.9"
 edition = "2024"
 
 [dependencies]

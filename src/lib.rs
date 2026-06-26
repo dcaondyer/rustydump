@@ -584,8 +584,10 @@ fn disassemble(bytes: &[u8], config: &Config, symbols: SymbolMap) -> Result<(), 
             &config.instr_format,
             config.demangle, // DemangleStyle::None se -C non passato
             &symbols,
-            config.ida_header,
             config.decoder,
+            config.ida_header,
+            config.ida_jump,
+            config.ida_xrefs,
         );
     }
 

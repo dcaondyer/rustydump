@@ -30,8 +30,10 @@ pub fn disasm(
     instr_format: &InstructionFormat,
     demangle: DemangleStyle,
     symbols: &SymbolMap,
-    ida_header: bool,
     decoder: DecoderKind,
+    ida_header: bool,
+    ida_jump: bool,
+    ida_xrefs: bool,
 ) {
     match decoder {
         DecoderKind::Iced => iced::disasm(
@@ -42,6 +44,8 @@ pub fn disasm(
             demangle,
             symbols,
             ida_header,
+            ida_jump,
+            ida_xrefs,
         ),
         DecoderKind::Zydis => zydis::disasm(
             code_bitness,
@@ -51,6 +55,8 @@ pub fn disasm(
             demangle,
             symbols,
             ida_header,
+            ida_jump,
+            ida_xrefs,
         ),
     };
 }
@@ -65,6 +71,7 @@ pub fn construct_entry_and_target(
     jmp_target: &mut HashMap<u64, ColoredString>,
     function_xrefs: &mut HashMap<u64, BTreeSet<u64>>,
     jmp_xrefs: &mut HashMap<u64, BTreeSet<u64>>,
+    xrefs_enabled: bool,
 ) {
     match jmp_type {
         JmpType::Call => {
@@ -75,13 +82,15 @@ pub fn construct_entry_and_target(
             } else {
                 function_entry.insert(addr, format!("sub_{addr:016X}").bright_green());
             }
-            match function_xrefs.remove(&addr) {
-                Some(mut xrefs) => {
-                    xrefs.insert(ip);
-                    function_xrefs.insert(addr, xrefs);
-                }
-                None => {
-                    function_xrefs.insert(addr, BTreeSet::new());
+            if xrefs_enabled {
+                match function_xrefs.remove(&addr) {
+                    Some(mut xrefs) => {
+                        xrefs.insert(ip);
+                        function_xrefs.insert(addr, xrefs);
+                    }
+                    None => {
+                        function_xrefs.insert(addr, BTreeSet::new());
+                    }
                 }
             }
         }
@@ -93,13 +102,15 @@ pub fn construct_entry_and_target(
             } else {
                 jmp_target.insert(addr, format!("loc_{addr:016X}").bright_green());
             }
-            match jmp_xrefs.remove(&addr) {
-                Some(mut xrefs) => {
-                    xrefs.insert(ip);
-                    jmp_xrefs.insert(addr, xrefs);
-                }
-                None => {
-                    jmp_xrefs.insert(addr, BTreeSet::new());
+            if xrefs_enabled {
+                match jmp_xrefs.remove(&addr) {
+                    Some(mut xrefs) => {
+                        xrefs.insert(ip);
+                        jmp_xrefs.insert(addr, xrefs);
+                    }
+                    None => {
+                        jmp_xrefs.insert(addr, BTreeSet::new());
+                    }
                 }
             }
         }
@@ -112,6 +123,7 @@ pub fn print_symbol_or_label(
     jmp_target: &HashMap<u64, ColoredString>,
     function_xrefs: &HashMap<u64, BTreeSet<u64>>,
     jmp_xrefs: &HashMap<u64, BTreeSet<u64>>,
+    xrefs_enabled: bool,
 ) {
     let mut is_function: bool = false;
     let mut is_jmp: bool = false;
@@ -127,24 +139,26 @@ pub fn print_symbol_or_label(
         is_function = true;
     }
 
-    if is_function && let Some(xrefs) = function_xrefs.get(&ip) {
-        let mut it = xrefs.iter().peekable();
+    if xrefs_enabled {
+        if is_function && let Some(xrefs) = function_xrefs.get(&ip) {
+            let mut it = xrefs.iter().peekable();
 
-        if let Some(first) = it.next() {
-            println!(
-                "{}{}{}",
-                PAD,
-                "xrefs: ".purple(),
-                format!("0x{:016X}", first).to_string().bright_yellow()
-            );
-        }
-        for xref in it {
-            println!(
-                "{}{}{}",
-                PAD,
-                "       ".purple(),
-                format!("0x{:016X}", xref).to_string().bright_yellow()
-            );
+            if let Some(first) = it.next() {
+                println!(
+                    "{}{}{}",
+                    PAD,
+                    "xrefs: ".purple(),
+                    format!("0x{:016X}", first).to_string().bright_yellow()
+                );
+            }
+            for xref in it {
+                println!(
+                    "{}{}{}",
+                    PAD,
+                    "       ".purple(),
+                    format!("0x{:016X}", xref).to_string().bright_yellow()
+                );
+            }
         }
     }
 
@@ -156,24 +170,26 @@ pub fn print_symbol_or_label(
         is_jmp = true;
     }
 
-    if is_jmp && let Some(xrefs) = jmp_xrefs.get(&ip) {
-        let mut it = xrefs.iter().peekable();
+    if xrefs_enabled {
+        if is_jmp && let Some(xrefs) = jmp_xrefs.get(&ip) {
+            let mut it = xrefs.iter().peekable();
 
-        if let Some(first) = it.next() {
-            println!(
-                "{}{}{}",
-                PAD,
-                "xrefs: ".purple(),
-                format!("0x{:016X}", first).to_string().bright_yellow()
-            );
-        }
-        for xref in it {
-            println!(
-                "{}{}{}",
-                PAD,
-                "       ".purple(),
-                format!("0x{:016X}", xref).to_string().bright_yellow()
-            );
+            if let Some(first) = it.next() {
+                println!(
+                    "{}{}{}",
+                    PAD,
+                    "xrefs: ".purple(),
+                    format!("0x{:016X}", first).to_string().bright_yellow()
+                );
+            }
+            for xref in it {
+                println!(
+                    "{}{}{}",
+                    PAD,
+                    "       ".purple(),
+                    format!("0x{:016X}", xref).to_string().bright_yellow()
+                );
+            }
         }
     }
 }
