@@ -164,64 +164,92 @@ pub fn disasm(
         //    Err(_) => "<format error>".to_string(),
         //};
 
-        const N: usize = 5;
-        const buf_size: usize = 256; // Raccomandato dalla documentazione
-        let mut buf = [0u8; buf_size];
-
-        // Colonna 4: istruzione disassemblata con colorazione per token
-        let formatted: String = match formatter.tokenize::<N>(Some(ip), &inst, &mut buf, None) {
-            Ok(first_token) => {
-                // FormatterToken implementa IntoIterator → (Token, &str)
-                first_token
-                    .into_iter()
-                    .map(|(token, text)| get_color(text, token).to_string())
-                    .collect()
-            }
-            Err(_) => "<format error>".white().to_string(),
-        };
-
         // Sostituiamo gli indirizzi numerici con i nomi simbolici colorati
         // quando ida_header è abilitato.
-        if ida_header {
-            if let Some((addr, jmp_type)) = extract_addr_from_instruction(&inst, ip) {
-                let sym_colored = if let Some(sym_name) = symbols.get(&addr) {
-                    let name = try_demangle(sym_name, demangle).unwrap_or_else(|| sym_name.clone());
-                    name.bright_green().to_string()
-                } else {
-                    match jmp_type {
-                        JmpType::Call => format!("sub_{addr:016X}").bright_green().to_string(),
-                        JmpType::Jmp => format!("loc_{addr:016X}").bright_green().to_string(),
-                    }
-                };
+        //if ida_header {
+        //    if let Some((addr, jmp_type)) = extract_addr_from_instruction(&inst, ip) {
+        //        let sym_colored = if let Some(sym_name) = symbols.get(&addr) {
+        //            let name = try_demangle(sym_name, demangle).unwrap_or_else(|| sym_name.clone());
+        //            name.bright_green().to_string()
+        //        } else {
+        //            match jmp_type {
+        //                JmpType::Call => format!("sub_{addr:016X}").bright_green().to_string(),
+        //                JmpType::Jmp => format!("loc_{addr:016X}").bright_green().to_string(),
+        //            }
+        //        };
 
-                // Sostituiamo l'indirizzo esadecimale nel testo formattato
-                // con il nome del simbolo (euristica: cerchiamo l'hex dell'indirizzo).
-                let addr_hex_intel = format!("0x{addr:016x}");
-                let addr_hex_intel_upper = format!("0x{addr:016X}");
-                let addr_hex = format!("{addr:016x}");
-                let addr_hex_upper = format!("{addr:016X}");
+        //        // Sostituiamo l'indirizzo esadecimale nel testo formattato
+        //        // con il nome del simbolo (euristica: cerchiamo l'hex dell'indirizzo).
+        //        let addr_hex_intel = format!("0x{addr:016x}");
+        //        let addr_hex_intel_upper = format!("0x{addr:016X}");
+        //        let addr_hex = format!("{addr:016x}");
+        //        let addr_hex_upper = format!("{addr:016X}");
 
-                let patched = if formatted.contains(&addr_hex_intel) {
-                    formatted.replacen(&addr_hex_intel, &sym_colored, 1)
-                } else if formatted.contains(&addr_hex_intel_upper) {
-                    formatted.replacen(&addr_hex_intel_upper, &sym_colored, 1)
-                } else if formatted.contains(&addr_hex) {
-                    formatted.replacen(&addr_hex, &sym_colored, 1)
-                } else if formatted.contains(&addr_hex_upper) {
-                    formatted.replacen(&addr_hex_upper, &sym_colored, 1)
-                } else {
-                    // Nessun match testuale: stampiamo il testo com'è + il nome a fianco
-                    format!("{formatted}  {sym_colored}")
-                };
+        //        let patched = if formatted.contains(&addr_hex_intel) {
+        //            formatted.replacen(&addr_hex_intel, &sym_colored, 1)
+        //        } else if formatted.contains(&addr_hex_intel_upper) {
+        //            formatted.replacen(&addr_hex_intel_upper, &sym_colored, 1)
+        //        } else if formatted.contains(&addr_hex) {
+        //            formatted.replacen(&addr_hex, &sym_colored, 1)
+        //        } else if formatted.contains(&addr_hex_upper) {
+        //            formatted.replacen(&addr_hex_upper, &sym_colored, 1)
+        //        } else {
+        //            // Nessun match testuale: stampiamo il testo com'è + il nome a fianco
+        //            format!("{formatted}  {sym_colored}")
+        //        };
 
-                print!("{}", patched);
-            } else {
-                print!("{}", formatted);
-            }
-        } else {
-            print!("{}", formatted);
-        }
+        //        print!("{}", patched);
+        //    } else {
+        //        print!("{}", formatted);
+        //    }
+        //} else {
+        //    print!("{}", formatted);
+        //}
 
+        const N: usize = 5;
+        const BUF_SIZE: usize = 256; // Raccomandato dalla documentazione
+        let mut buf = [0u8; BUF_SIZE];
+
+        // Colonna 4: istruzione disassemblata con colorazione per token
+        let formatted_colored: String =
+            match formatter.tokenize::<N>(Some(ip), &inst, &mut buf, None) {
+                Ok(first_token) => {
+                    let branch_info = if ida_header {
+                        extract_addr_from_instruction(&inst, ip)
+                    } else {
+                        None
+                    };
+
+                    first_token
+                        .into_iter()
+                        .map(|(token, text)| {
+                            // Se è un indirizzo assoluto e abbiamo un simbolo, sostituiamo
+                            if token.0 == 0x08 || token.0 == 0x09 {
+                                if let Some((addr, ref jmp_type)) = branch_info {
+                                    if let Some(sym_name) = symbols.get(&addr) {
+                                        let name = try_demangle(sym_name, demangle)
+                                            .unwrap_or_else(|| sym_name.clone());
+                                        return name.bright_green().to_string();
+                                    } else {
+                                        return match jmp_type {
+                                            JmpType::Call => format!("sub_{addr:016X}")
+                                                .bright_green()
+                                                .to_string(),
+                                            JmpType::Jmp => format!("loc_{addr:016X}")
+                                                .bright_green()
+                                                .to_string(),
+                                        };
+                                    }
+                                }
+                            }
+                            get_color(text, token).to_string()
+                        })
+                        .collect()
+                }
+                Err(_) => "<format error>".white().to_string(),
+            };
+
+        print!("{}", formatted_colored);
         println!();
     }
 }
