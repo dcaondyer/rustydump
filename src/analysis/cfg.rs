@@ -271,7 +271,7 @@ impl CFG {
     pub fn to_dot(&self, graph_name: &str) -> String {
         let mut out = String::new();
 
-        /// Sanitizza il nome per DOT (no caratteri speciali)
+        // Sanitizza il nome per DOT (no caratteri speciali)
         let safe_name = graph_name.replace(['.', '/', '-'], "_");
 
         writeln!(out, "digraph {} {{", safe_name).unwrap();
