@@ -1,7 +1,7 @@
 mod basic_block;
 mod cfg;
 
-use crate::analysis::cfg::CFG;
+use crate::analysis::cfg::Cfg;
 use crate::decode::iced::IcedBackend;
 use crate::decode::zydis::ZydisBackend;
 use crate::decode::{BackendKind, DecoderBackend};
@@ -14,7 +14,7 @@ pub fn construct_cfg(
     bitness: u32,
     backend: BackendKind,
     dot_output: Option<&Path>,
-) -> Result<CFG, Box<dyn std::error::Error>> {
+) -> Result<Cfg, Box<dyn std::error::Error>> {
     // Dispatch concreto tramite enum — nessun problema di tipo
     let instructions = match backend {
         BackendKind::Iced => {
@@ -25,7 +25,7 @@ pub fn construct_cfg(
         }
     };
 
-    let cfg = CFG::build(instructions);
+    let cfg = Cfg::build(instructions);
     cfg.print();
 
     let loops = cfg.back_edges();

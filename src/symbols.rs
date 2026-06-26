@@ -28,47 +28,43 @@ pub fn build_symbol_map(bytes: &[u8]) -> SymbolMap {
             // Simboli statici — export della DLL/EXE
             for export in &pe.exports {
                 if let Some(name) = export.name {
-                    let addr = export.rva as u64 + pe.image_base as u64;
+                    let addr = export.rva as u64 + pe.image_base;
                     map.insert(addr, name.to_string());
                 }
             }
 
             // Simboli dinamici — import dalle DLL esterne
             for import in &pe.imports {
-                let addr = import.rva as u64 + pe.image_base as u64;
+                let addr = import.rva as u64 + pe.image_base;
                 // Formato "DllName.dll!FunctionName" come IDA Pro
                 let name = format!("{}!{}", import.dll, import.name);
                 map.insert(addr, name);
             }
         }
-        Ok(Object::Mach(mach)) => {
-            if let Mach::Binary(m) = mach {
-                // Symbol table (nlist)
-                if let Some(symbols) = &m.symbols {
-                    for res in symbols.into_iter() {
-                        if let Ok((name, nlist)) = res {
-                            if nlist.n_value != 0 && !name.is_empty() {
-                                map.insert(nlist.n_value, name.to_string());
-                            }
-                        }
+        Ok(Object::Mach(Mach::Binary(m))) => {
+            // Symbol table (nlist)
+            if let Some(symbols) = &m.symbols {
+                for (name, nlist) in symbols.into_iter().flatten() {
+                    if nlist.n_value != 0 && !name.is_empty() {
+                        map.insert(nlist.n_value, name.to_string());
                     }
                 }
+            }
 
-                // Export trie — più affidabile per i simboli dinamici
-                if let Ok(exports) = m.exports() {
-                    for export in exports {
-                        if export.size != 0 {
-                            map.insert(export.offset, export.name.to_string());
-                        }
+            // Export trie — più affidabile per i simboli dinamici
+            if let Ok(exports) = m.exports() {
+                for export in exports {
+                    if export.size != 0 {
+                        map.insert(export.offset, export.name.to_string());
                     }
                 }
+            }
 
-                // Import — simboli dinamici da librerie esterne
-                if let Ok(imports) = m.imports() {
-                    for import in imports {
-                        let name = format!("{}!{}", import.dylib, import.name);
-                        map.insert(import.address, name);
-                    }
+            // Import — simboli dinamici da librerie esterne
+            if let Ok(imports) = m.imports() {
+                for import in imports {
+                    let name = format!("{}!{}", import.dylib, import.name);
+                    map.insert(import.address, name);
                 }
             }
         }

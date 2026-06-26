@@ -61,7 +61,7 @@ fn parse_macho(macho: &MachO, bytes: &[u8]) -> Result<Vec<ExecutableSection>, Bo
             }
 
             let offset = section.offset as u64;
-            let size = section.size as u64;
+            let size = section.size;
 
             let offset_usize = offset as usize;
             let size_usize = size as usize;

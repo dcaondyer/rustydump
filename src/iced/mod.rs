@@ -219,8 +219,8 @@ pub fn extract_addr_from_instruction(
             match bitness {
                 16 => inst.near_branch16() as u64,
                 32 => inst.near_branch32() as u64,
-                64 => inst.near_branch64() as u64,
-                _ => inst.near_branch_target() as u64,
+                64 => inst.near_branch64(),
+                _ => inst.near_branch_target(),
             },
             JmpType::Call,
         ));
@@ -231,8 +231,8 @@ pub fn extract_addr_from_instruction(
             match bitness {
                 16 => inst.near_branch16() as u64,
                 32 => inst.near_branch32() as u64,
-                64 => inst.near_branch64() as u64,
-                _ => inst.near_branch_target() as u64,
+                64 => inst.near_branch64(),
+                _ => inst.near_branch_target(),
             },
             JmpType::Jmp,
         ));
@@ -243,8 +243,8 @@ pub fn extract_addr_from_instruction(
             match bitness {
                 16 => inst.far_branch16() as u64,
                 32 => inst.far_branch32() as u64,
-                64 => inst.near_branch64() as u64,
-                _ => inst.near_branch_target() as u64,
+                64 => inst.near_branch64(),
+                _ => inst.near_branch_target(),
             },
             JmpType::Call,
         ));
@@ -255,8 +255,8 @@ pub fn extract_addr_from_instruction(
             match bitness {
                 16 => inst.far_branch16() as u64,
                 32 => inst.far_branch32() as u64,
-                64 => inst.near_branch64() as u64,
-                _ => inst.near_branch_target() as u64,
+                64 => inst.near_branch64(),
+                _ => inst.near_branch_target(),
             },
             JmpType::Jmp,
         ));
@@ -306,8 +306,7 @@ pub fn extract_addr_from_instruction(
         .trim_end_matches(['h', 'H'])
         .trim_start_matches("0x")
         .trim_start_matches("0X")
-        .replace('_', "")
-        .replace(',', "")
+        .replace(['_', ','], "")
         .replace("ptr", "")
         .replace("near", "")
         .trim()

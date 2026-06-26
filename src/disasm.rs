@@ -139,26 +139,27 @@ pub fn print_symbol_or_label(
         is_function = true;
     }
 
-    if xrefs_enabled {
-        if is_function && let Some(xrefs) = function_xrefs.get(&ip) {
-            let mut it = xrefs.iter().peekable();
+    if xrefs_enabled
+        && is_function
+        && let Some(xrefs) = function_xrefs.get(&ip)
+    {
+        let mut it = xrefs.iter().peekable();
 
-            if let Some(first) = it.next() {
-                println!(
-                    "{}{}{}",
-                    PAD,
-                    "xrefs: ".purple(),
-                    format!("0x{:016X}", first).to_string().bright_yellow()
-                );
-            }
-            for xref in it {
-                println!(
-                    "{}{}{}",
-                    PAD,
-                    "       ".purple(),
-                    format!("0x{:016X}", xref).to_string().bright_yellow()
-                );
-            }
+        if let Some(first) = it.next() {
+            println!(
+                "{}{}{}",
+                PAD,
+                "xrefs: ".purple(),
+                format!("0x{:016X}", first).to_string().bright_yellow()
+            );
+        }
+        for xref in it {
+            println!(
+                "{}{}{}",
+                PAD,
+                "       ".purple(),
+                format!("0x{:016X}", xref).to_string().bright_yellow()
+            );
         }
     }
 
@@ -170,26 +171,27 @@ pub fn print_symbol_or_label(
         is_jmp = true;
     }
 
-    if xrefs_enabled {
-        if is_jmp && let Some(xrefs) = jmp_xrefs.get(&ip) {
-            let mut it = xrefs.iter().peekable();
+    if xrefs_enabled
+        && is_jmp
+        && let Some(xrefs) = jmp_xrefs.get(&ip)
+    {
+        let mut it = xrefs.iter().peekable();
 
-            if let Some(first) = it.next() {
-                println!(
-                    "{}{}{}",
-                    PAD,
-                    "xrefs: ".purple(),
-                    format!("0x{:016X}", first).to_string().bright_yellow()
-                );
-            }
-            for xref in it {
-                println!(
-                    "{}{}{}",
-                    PAD,
-                    "       ".purple(),
-                    format!("0x{:016X}", xref).to_string().bright_yellow()
-                );
-            }
+        if let Some(first) = it.next() {
+            println!(
+                "{}{}{}",
+                PAD,
+                "xrefs: ".purple(),
+                format!("0x{:016X}", first).to_string().bright_yellow()
+            );
+        }
+        for xref in it {
+            println!(
+                "{}{}{}",
+                PAD,
+                "       ".purple(),
+                format!("0x{:016X}", xref).to_string().bright_yellow()
+            );
         }
     }
 }

@@ -3,13 +3,13 @@ use crate::decode::{Flow, InstIR};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Write as FmtWrite;
 
-pub struct CFG {
+pub struct Cfg {
     pub blocks: Vec<BasicBlock>,
     pub addr_to_block: HashMap<u64, usize>,
     pub entry: usize,
 }
 
-impl CFG {
+impl Cfg {
     /// Costruisce il CFG a partire dalla lista piatta di istruzioni
     /// già decodificate e sollevate in InstIR
     pub fn build(instructions: Vec<InstIR>) -> Self {
@@ -294,7 +294,7 @@ impl CFG {
             let is_entry = block.id == self.entry;
             let is_returning = block
                 .terminator()
-                .map_or(false, |t| matches!(t.flow, crate::decode::Flow::Return));
+                .is_some_and(|t| matches!(t.flow, crate::decode::Flow::Return));
 
             // Colore nodo
             let fillcolor = if is_entry {
@@ -383,15 +383,15 @@ impl CFG {
     }
 
     fn edge_label(&self, from: &BasicBlock, to_id: usize) -> &'static str {
-        if let Some(term) = from.terminator() {
-            if let crate::decode::Flow::Conditional(target, fallthrough) = &term.flow {
-                let to_addr = self.blocks[to_id].addr;
-                if to_addr == *target {
-                    return "T";
-                }
-                if to_addr == *fallthrough {
-                    return "F";
-                }
+        if let Some(term) = from.terminator()
+            && let Flow::Conditional(target, fallthrough) = &term.flow
+        {
+            let to_addr = self.blocks[to_id].addr;
+            if to_addr == *target {
+                return "T";
+            }
+            if to_addr == *fallthrough {
+                return "F";
             }
         }
         ""

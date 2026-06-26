@@ -4,8 +4,8 @@ use zydis::{MachineMode, Register, StackWidth, VisibleOperands};
 pub struct ZydisBackend {}
 
 impl ZydisBackend {
-    pub fn new() -> impl DecoderBackend {
-        ZydisBackend {}
+    pub fn new() -> Self {
+        Self {}
     }
 
     fn zydis_mode(bitness: u32) -> (MachineMode, StackWidth) {
@@ -51,7 +51,7 @@ impl ZydisBackend {
             DecodedOperandKind::Reg(reg) => {
                 Some(Operand::Reg(ZydisBackend::convert_reg(*reg, mode)))
             }
-            DecodedOperandKind::Imm(imm) => Some(Operand::Imm(imm.value as u64)),
+            DecodedOperandKind::Imm(imm) => Some(Operand::Imm(imm.value)),
             DecodedOperandKind::Mem(mem) => {
                 Some(Operand::Mem(ZydisBackend::convert_mem(mem, mode)))
             }
@@ -61,10 +61,10 @@ impl ZydisBackend {
 
     fn is_conditional_jump(mnemonic: zydis::Mnemonic) -> bool {
         use zydis::Mnemonic::*;
-        match mnemonic {
-            JB | JBE | JCXZ | JECXZ | JRCXZ | JL | JLE | JNO | JNP | JNS | JO | JP | JS => true,
-            _ => false,
-        }
+        matches!(
+            mnemonic,
+            JB | JBE | JCXZ | JECXZ | JRCXZ | JL | JLE | JNO | JNP | JNS | JO | JP | JS
+        )
     }
 
     fn branch_target(ip: u64, len: usize, operands: &[zydis::ffi::DecodedOperand]) -> Option<u64> {
@@ -152,10 +152,10 @@ impl ZydisBackend {
         decoder
             .decode_all::<VisibleOperands>(bytes, rip)
             .filter_map(|res| res.ok())
-            .map(|(ip, _raw_bytes, insn)| {
+            .map(|(ip, _raw_bytes, inst)| {
                 // VisibleOperands implementa Deref<Target=[DecodedOperand]>
                 // quindi &*insn dà direttamente la slice degli operandi visibili
-                ZydisBackend::lift_instruction(&insn, &insn.operands(), ip, mode)
+                ZydisBackend::lift_instruction(&inst, inst.operands(), ip, mode)
             })
             .collect()
     }

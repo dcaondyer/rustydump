@@ -5,13 +5,13 @@ use iced_x86::{FlowControl, Instruction, Mnemonic, Register};
 pub struct IcedBackend {}
 
 impl IcedBackend {
-    pub fn new() -> impl DecoderBackend {
-        IcedBackend {}
+    pub fn new() -> Self {
+        Self {}
     }
 
     fn reg_size(reg: Register) -> usize {
         match reg.size() {
-            1 | 2 | 4 | 8 | 16 | 32 | 64 => reg.size() as usize,
+            1 | 2 | 4 | 8 | 16 | 32 | 64 => reg.size(),
             _ => 0,
         }
     }

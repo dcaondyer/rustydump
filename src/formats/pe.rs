@@ -35,7 +35,7 @@ impl BinaryFormat for PeFormat {
             }
 
             let data = bytes[offset_usize..offset_usize + size_usize].to_vec();
-            let virtual_address = section.virtual_address as u64 + pe.image_base as u64;
+            let virtual_address = section.virtual_address as u64 + pe.image_base;
 
             let section_flags = if section_flags != 0 {
                 Some(section_flags as u64)

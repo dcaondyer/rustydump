@@ -1,6 +1,6 @@
 [package]
 name = "rustydump"
-version = "0.9.10"
+version = "0.9.12"
 authors = ["dcaondyer"]
 description = """
 Rustydump is a modern, objdump-compatible binary analysis tool written in Rust for i386 and amd64.

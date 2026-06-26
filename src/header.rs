@@ -7,7 +7,7 @@ use goblin::Object;
 use md5;
 use sha2::{Digest, Sha256};
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::{Duration, UNIX_EPOCH};
 
 const BOX_WIDTH: usize = 75;
@@ -18,7 +18,7 @@ fn box_line(content: &str) -> String {
     format!("; |{}|", padded)
 }
 
-pub fn print_ida_file_header(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn Error>> {
+pub fn print_ida_file_header(bytes: &[u8], file: &Path) -> Result<(), Box<dyn Error>> {
     let top = format!("; +{}+", "-".repeat(BOX_WIDTH - 2));
     let bottom = format!("; +{}+", "-".repeat(BOX_WIDTH - 2));
 

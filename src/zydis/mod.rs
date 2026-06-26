@@ -65,10 +65,9 @@ pub fn extract_addr_from_instruction(
         .operands()
         .iter()
         .find(|o| matches!(o.kind, DecodedOperandKind::Imm(_)))
+        && let Ok(addr) = inst.calc_absolute_address(ip, op)
     {
-        if let Ok(addr) = inst.calc_absolute_address(ip, op) {
-            return Some((addr, jmp_type));
-        }
+        return Some((addr, jmp_type));
     }
 
     None
@@ -227,22 +226,22 @@ pub fn disasm(
                         .into_iter()
                         .map(|(token, text)| {
                             // Se è un indirizzo assoluto e abbiamo un simbolo, sostituiamo
-                            if token.0 == 0x08 || token.0 == 0x09 {
-                                if let Some((addr, ref jmp_type)) = branch_info {
-                                    if let Some(sym_name) = symbols.get(&addr) {
-                                        let name = try_demangle(sym_name, demangle)
-                                            .unwrap_or_else(|| sym_name.clone());
-                                        return name.bright_green().to_string();
-                                    } else {
-                                        return match jmp_type {
-                                            JmpType::Call => format!("sub_{addr:016X}")
-                                                .bright_green()
-                                                .to_string(),
-                                            JmpType::Jmp => format!("loc_{addr:016X}")
-                                                .bright_green()
-                                                .to_string(),
-                                        };
-                                    }
+                            if (token.0 == 0x08 || token.0 == 0x09)
+                                && let Some((addr, ref jmp_type)) = branch_info
+                            {
+                                if let Some(sym_name) = symbols.get(&addr) {
+                                    let name = try_demangle(sym_name, demangle)
+                                        .unwrap_or_else(|| sym_name.clone());
+                                    return name.bright_green().to_string();
+                                } else {
+                                    return match jmp_type {
+                                        JmpType::Call => {
+                                            format!("sub_{addr:016X}").bright_green().to_string()
+                                        }
+                                        JmpType::Jmp => {
+                                            format!("loc_{addr:016X}").bright_green().to_string()
+                                        }
+                                    };
                                 }
                             }
                             get_color(text, token).to_string()

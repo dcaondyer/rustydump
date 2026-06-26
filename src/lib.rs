@@ -22,7 +22,7 @@ use goblin::mach::{Mach, SingleArch};
 use goblin::Object;
 use std::error::Error;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub fn process_file(file: &PathBuf, config: &Config) -> Result<(), Box<dyn Error>> {
     let bytes = fs::read(file)?;
@@ -123,7 +123,7 @@ impl FileHeader {
             Object::PE(pe) => Ok(Self {
                 arch: if pe.is_64 { "i386:x86-64" } else { "i386" },
                 flags: pe.header.coff_header.characteristics as u32,
-                start_address: pe.entry as u64 + pe.image_base as u64,
+                start_address: pe.entry as u64 + pe.image_base,
             }),
             Object::Mach(mach) => {
                 let (flags, start_address, arch) = match mach {
@@ -166,7 +166,7 @@ impl FileHeader {
     }
 }
 
-fn print_file_headers(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn Error>> {
+fn print_file_headers(bytes: &[u8], file: &Path) -> Result<(), Box<dyn Error>> {
     println!();
     match FileHeader::from_bytes(bytes) {
         Ok(hdr) => {
@@ -210,7 +210,7 @@ fn print_section_headers(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
         Object::PE(pe) => {
             for (idx, section) in pe.sections.iter().enumerate() {
                 let name = section.name().unwrap_or("?");
-                let vma = section.virtual_address as u64 + pe.image_base as u64;
+                let vma = section.virtual_address as u64 + pe.image_base;
                 println!(
                     "{:<4} {:<20} {:>8x} {:>16x} {:>16x} {:>8x} 2**4  {}",
                     idx,
@@ -331,13 +331,13 @@ fn print_symbol_table(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
             }
         }
         Object::PE(pe) => {
-            if pe.exports.len() == 0 {
+            if pe.exports.is_empty() {
                 println!("(symbol table is empty)");
             }
             for sym in &pe.exports {
                 println!(
                     "{:016x} g F {:016x} {}",
-                    sym.rva as u64 + pe.image_base as u64,
+                    sym.rva as u64 + pe.image_base,
                     sym.size as u64,
                     sym.name.unwrap_or("?")
                 );
@@ -389,7 +389,7 @@ fn print_dynamic_syms(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
             }
         }
         Object::PE(pe) => {
-            if pe.imports.len() == 0 {
+            if pe.imports.is_empty() {
                 println!("(dynamic symbol table is empty)");
             }
             for import in &pe.imports {
@@ -412,9 +412,7 @@ fn print_dynamic_syms(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
                                 if export.size != 0 {
                                     println!(
                                         "{:016x}   {:016x} {}",
-                                        export.offset,
-                                        0u64,
-                                        export.name.to_string()
+                                        export.offset, 0u64, export.name
                                     );
                                 }
                             }
@@ -433,9 +431,7 @@ fn print_dynamic_syms(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
                                 if import.size != 0 {
                                     println!(
                                         "{:016x}   {:016x} {}",
-                                        import.offset,
-                                        0u64,
-                                        import.name.to_string()
+                                        import.offset, 0u64, import.name
                                     );
                                 }
                             }
@@ -455,7 +451,7 @@ fn print_full_contents(bytes: &[u8], filter: Option<&str>) -> Result<(), Box<dyn
         Object::Elf(elf) => {
             for section in &elf.section_headers {
                 let name = elf.shdr_strtab.get_at(section.sh_name).unwrap_or("?");
-                if filter.map_or(false, |f| f != name) {
+                if filter.is_some_and(|f| f != name) {
                     continue;
                 }
                 let off = section.sh_offset as usize;
@@ -469,12 +465,12 @@ fn print_full_contents(bytes: &[u8], filter: Option<&str>) -> Result<(), Box<dyn
         Object::PE(pe) => {
             for section in &pe.sections {
                 let name = section.name().unwrap_or("?");
-                if filter.map_or(false, |f| f != name) {
+                if filter.is_some_and(|f| f != name) {
                     continue;
                 }
                 let off = section.pointer_to_raw_data as usize;
                 let size = section.size_of_raw_data as usize;
-                let vma = section.virtual_address as u64 + pe.image_base as u64;
+                let vma = section.virtual_address as u64 + pe.image_base;
                 print_hex_dump(name, vma, &bytes[off..off + size]);
             }
         }
@@ -518,21 +514,21 @@ fn disassemble(bytes: &[u8], config: &Config, symbols: SymbolMap) -> Result<(), 
         Object::PE(_) => {
             let mut s = PeFormat::parse(bytes)?;
             if !config.disassemble_all {
-                s.retain(|sec| filter.map_or(true, |f| sec.name == f));
+                s.retain(|sec| filter.is_none_or(|f| sec.name == f));
             }
             s
         }
         Object::Elf(_) => {
             let mut s = ElfFormat::parse(bytes)?;
             if !config.disassemble_all {
-                s.retain(|sec| filter.map_or(true, |f| sec.name == f));
+                s.retain(|sec| filter.is_none_or(|f| sec.name == f));
             }
             s
         }
         Object::Mach(_) => {
             let mut s = MachoFormat::parse(bytes)?;
             if !config.disassemble_all {
-                s.retain(|sec| filter.map_or(true, |f| sec.name == f));
+                s.retain(|sec| filter.is_none_or(|f| sec.name == f));
             }
             s
         }

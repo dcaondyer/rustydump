@@ -1,4 +1,5 @@
 use colored::Colorize;
+use std::cmp::Reverse;
 
 struct Pattern<'a> {
     label: &'a str,
@@ -183,7 +184,7 @@ fn detect_compilers_ranked(bytes: &[u8]) -> Vec<CompilerMatch> {
     }
 
     // Ordina per score decrescente
-    results.sort_by(|a, b| b.score.cmp(&a.score));
+    results.sort_by_key(|b| Reverse(b.score));
 
     results
 }
@@ -211,7 +212,7 @@ pub fn print_compiler_info(bytes: &[u8]) {
     let compilers = detect_compilers_ranked(bytes);
 
     if compilers.is_empty() {
-        println!("{} {}", "; No compiler detected".bright_black(), "");
+        println!("{}", "; No compiler detected".bright_black());
         println!("{}", ";".bright_black());
         return;
     }
