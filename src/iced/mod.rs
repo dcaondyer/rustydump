@@ -2,7 +2,7 @@ pub mod output;
 
 use crate::config::InstructionFormat;
 use crate::demangle::{try_demangle, DemangleStyle};
-use crate::disasm::print_symbol_or_label;
+use crate::disasm::{construct_entry_and_target, print_symbol_or_label, JmpType};
 use crate::formats::ExecutableSection;
 use crate::header::print_ida_section_header;
 use crate::iced::output::{get_color, MyFormatterOutput};
@@ -12,13 +12,7 @@ use iced_x86::{
     Decoder, DecoderOptions, Formatter, FormatterTextKind, GasFormatter, Instruction,
     IntelFormatter, MasmFormatter, NasmFormatter, OpKind,
 };
-use std::collections::HashMap;
-
-#[derive(PartialEq)]
-pub enum JmpType {
-    Call,
-    Jmp,
-}
+use std::collections::{BTreeSet, HashMap};
 
 macro_rules! run_disasm {
     ($formatter:expr, $code_bitness:expr, $section:expr, $code_rip:expr, $demangle:expr, $symbols:expr, $ida_header:expr) => {{
@@ -27,7 +21,9 @@ macro_rules! run_disasm {
         let mut decoder = Decoder::with_ip($code_bitness, bytes, $code_rip, DecoderOptions::NONE);
         let mut output = MyFormatterOutput::new();
         let mut function_entry = HashMap::new();
+        let mut function_xrefs = HashMap::<u64, BTreeSet<u64>>::new();
         let mut jmp_target = HashMap::new();
+        let mut jmp_xrefs = HashMap::<u64, BTreeSet<u64>>::new();
 
         // Header stile IDA Pro
         if $ida_header {
@@ -42,6 +38,8 @@ macro_rules! run_disasm {
             let mut decoder =
                 Decoder::with_ip($code_bitness, bytes, $code_rip, DecoderOptions::NONE);
             for instruction in &mut decoder {
+                let ip = instruction.ip();
+
                 output.vec.clear();
                 $formatter.format(&instruction, &mut output);
                 for (text, kind) in output.vec.iter() {
@@ -50,34 +48,17 @@ macro_rules! run_disasm {
                             let addr =
                                 extract_addr_from_instruction(&instruction, text, $code_bitness);
                             if let Some((addr, jmp_type)) = addr {
-                                match jmp_type {
-                                    JmpType::Call => {
-                                        if let Some(sym_name) = $symbols.get(&addr) {
-                                            let name = try_demangle(sym_name, $demangle)
-                                                .unwrap_or_else(|| sym_name.clone());
-                                            let name = name.bright_green();
-                                            function_entry.insert(addr, name);
-                                        } else {
-                                            function_entry.insert(
-                                                addr,
-                                                format!("sub_{addr:016X}").bright_green(),
-                                            );
-                                        }
-                                    }
-                                    JmpType::Jmp => {
-                                        if let Some(sym_name) = $symbols.get(&addr) {
-                                            let name = try_demangle(sym_name, $demangle)
-                                                .unwrap_or_else(|| sym_name.clone());
-                                            let name = name.bright_green();
-                                            jmp_target.insert(addr, name);
-                                        } else {
-                                            jmp_target.insert(
-                                                addr,
-                                                format!("loc_{addr:016X}").bright_green(),
-                                            );
-                                        }
-                                    }
-                                }
+                                construct_entry_and_target(
+                                    addr,
+                                    ip,
+                                    jmp_type,
+                                    $symbols,
+                                    $demangle,
+                                    &mut function_entry,
+                                    &mut jmp_target,
+                                    &mut function_xrefs,
+                                    &mut jmp_xrefs,
+                                );
                             }
                         }
                         _ => {}
@@ -93,7 +74,13 @@ macro_rules! run_disasm {
             let instr_bytes = &bytes[offset..offset + instruction.len()];
 
             if $ida_header {
-                print_symbol_or_label(ip, &function_entry, &jmp_target);
+                print_symbol_or_label(
+                    ip,
+                    &function_entry,
+                    &jmp_target,
+                    &function_xrefs,
+                    &jmp_xrefs,
+                );
             }
 
             // Colonna 1: indirizzo

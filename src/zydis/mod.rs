@@ -1,30 +1,16 @@
+pub mod output;
+
 use crate::config::InstructionFormat;
 use crate::demangle::{try_demangle, DemangleStyle};
-use crate::disasm::print_symbol_or_label;
+use crate::disasm::{construct_entry_and_target, print_symbol_or_label, JmpType};
 use crate::formats::ExecutableSection;
 use crate::header::print_ida_section_header;
 use crate::symbols::SymbolMap;
+use crate::zydis::output::{get_color, make_formatter};
 use colored::Colorize;
-use std::collections::HashMap;
-use zydis::{
-    ffi::{DecodedOperandKind, MetaInfo}, Decoder, Formatter, FormatterStyle, InstructionCategory, MachineMode,
-    StackWidth,
-    VisibleOperands,
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipo di salto (speculare al modulo iced)
-// ─────────────────────────────────────────────────────────────────────────────
-
-#[derive(PartialEq)]
-pub enum JmpType {
-    Call,
-    Jmp,
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers: costruzione decoder / formatter da bitness e stile sintattico
-// ─────────────────────────────────────────────────────────────────────────────
+use std::collections::{BTreeSet, HashMap};
+use zydis::ffi::DecodedOperandKind;
+use zydis::{Decoder, InstructionCategory, MachineMode, StackWidth, VisibleOperands};
 
 fn make_decoder(code_bitness: u32) -> Decoder {
     match code_bitness {
@@ -38,21 +24,6 @@ fn make_decoder(code_bitness: u32) -> Decoder {
     }
 }
 
-fn make_formatter(instr_format: &InstructionFormat) -> Formatter {
-    match instr_format {
-        // Zydis supporta Intel e AT&T natively; per MASM/NASM cadiamo su Intel
-        // (comportamento identico al modulo iced che usa IntelFormatter per MASM/NASM)
-        InstructionFormat::Intel | InstructionFormat::Masm | InstructionFormat::Nasm => {
-            Formatter::new(FormatterStyle::INTEL)
-        }
-        InstructionFormat::Gas => Formatter::new(FormatterStyle::ATT),
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Estrazione indirizzo target + tipo di branch dall'istruzione
-// ─────────────────────────────────────────────────────────────────────────────
-
 /// Restituisce `(target_address, JmpType)` se l'istruzione è un branch
 /// statico (CALL o qualsiasi tipo di JMP/Jcc).
 /// Usa `calc_absolute_address` di Zydis per risolvere operandi RIP-relativi.
@@ -60,15 +31,15 @@ pub fn extract_addr_from_instruction(
     inst: &zydis::Instruction<VisibleOperands>,
     ip: u64,
 ) -> Option<(u64, JmpType)> {
-    let meta: &MetaInfo = &inst.meta;
+    let meta = &inst.meta;
 
-    // Determina il tipo di branch tramite InstructionCategory
     let jmp_type = match meta.category {
         InstructionCategory::CALL => JmpType::Call,
         InstructionCategory::UNCOND_BR | InstructionCategory::COND_BR => JmpType::Jmp,
         _ => return None,
     };
 
+    // 1. CASO MIGLIORE: branch diretto già risolto dal decoder
     // Cerca il primo operando che ha un indirizzo calcolabile
     for op in inst.operands() {
         match &op.kind {
@@ -92,16 +63,19 @@ pub fn extract_addr_from_instruction(
         }
     }
 
+    // 2. FALLBACK: immediato puro (JMP/CALL rel32/rel64)
+    if let Some(op) = inst
+        .operands()
+        .iter()
+        .find(|o| matches!(o.kind, DecodedOperandKind::Imm(_)))
+    {
+        if let Ok(addr) = inst.calc_absolute_address(ip, op) {
+            return Some((addr, jmp_type));
+        }
+    }
+
     None
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Stampa etichetta / entry point (come print_symbol_or_label nel modulo iced)
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Entry point pubblico
-// ─────────────────────────────────────────────────────────────────────────────
 
 pub fn disasm(
     code_bitness: u32,
@@ -116,9 +90,10 @@ pub fn disasm(
     let formatter = make_formatter(instr_format);
     let bytes = &section.data;
 
-    // ── Primo passaggio: costruiamo le mappe function_entry / jmp_target ──────
-    let mut function_entry: HashMap<u64, colored::ColoredString> = HashMap::new();
-    let mut jmp_target: HashMap<u64, colored::ColoredString> = HashMap::new();
+    let mut function_entry = HashMap::new();
+    let mut function_xrefs = HashMap::<u64, BTreeSet<u64>>::new();
+    let mut jmp_target = HashMap::new();
+    let mut jmp_xrefs = HashMap::<u64, BTreeSet<u64>>::new();
 
     if ida_header {
         print_ida_section_header(
@@ -129,44 +104,42 @@ pub fn disasm(
             true,
         );
 
-        for item in decoder.decode_all::<VisibleOperands>(bytes, code_rip) {
-            let (ip, _raw, insn) = match item {
+        for item in decoder.decode_all(bytes, code_rip) {
+            let (ip, _raw_bytes, inst) = match item {
                 Ok(x) => x,
                 Err(_) => continue,
             };
 
-            if let Some((addr, jmp_type)) = extract_addr_from_instruction(&insn, ip) {
-                let label = if let Some(sym_name) = symbols.get(&addr) {
-                    let name = try_demangle(sym_name, demangle).unwrap_or_else(|| sym_name.clone());
-                    name.bright_green()
-                } else {
-                    match jmp_type {
-                        JmpType::Call => format!("sub_{addr:016X}").bright_green(),
-                        JmpType::Jmp => format!("loc_{addr:016X}").bright_green(),
-                    }
-                };
-
-                match jmp_type {
-                    JmpType::Call => {
-                        function_entry.insert(addr, label);
-                    }
-                    JmpType::Jmp => {
-                        jmp_target.insert(addr, label);
-                    }
-                }
+            if let Some((addr, jmp_type)) = extract_addr_from_instruction(&inst, ip) {
+                construct_entry_and_target(
+                    addr,
+                    ip,
+                    jmp_type,
+                    symbols,
+                    demangle,
+                    &mut function_entry,
+                    &mut jmp_target,
+                    &mut function_xrefs,
+                    &mut jmp_xrefs,
+                );
             }
         }
     }
 
-    // ── Secondo passaggio: disassembly con output colorato ────────────────────
     for item in decoder.decode_all::<VisibleOperands>(bytes, code_rip) {
-        let (ip, raw_bytes, insn) = match item {
+        let (ip, raw_bytes, inst) = match item {
             Ok(x) => x,
             Err(_) => continue,
         };
 
         if ida_header {
-            print_symbol_or_label(ip, &function_entry, &jmp_target);
+            print_symbol_or_label(
+                ip,
+                &function_entry,
+                &jmp_target,
+                &function_xrefs,
+                &jmp_xrefs,
+            );
         }
 
         // Colonna 1: indirizzo virtuale
@@ -186,15 +159,31 @@ pub fn disasm(
         print!("{:<48}    ", hex_bytes);
 
         // Colonna 4: istruzione disassemblata + colorazione simboli
-        let formatted = match formatter.format(Some(ip), &insn) {
-            Ok(s) => s,
-            Err(_) => "<format error>".to_string(),
+        //let formatted = match formatter.format(Some(ip), &inst) {
+        //    Ok(s) => s,
+        //    Err(_) => "<format error>".to_string(),
+        //};
+
+        const N: usize = 5;
+        const buf_size: usize = 256; // Raccomandato dalla documentazione
+        let mut buf = [0u8; buf_size];
+
+        // Colonna 4: istruzione disassemblata con colorazione per token
+        let formatted: String = match formatter.tokenize::<N>(Some(ip), &inst, &mut buf, None) {
+            Ok(first_token) => {
+                // FormatterToken implementa IntoIterator → (Token, &str)
+                first_token
+                    .into_iter()
+                    .map(|(token, text)| get_color(text, token).to_string())
+                    .collect()
+            }
+            Err(_) => "<format error>".white().to_string(),
         };
 
         // Sostituiamo gli indirizzi numerici con i nomi simbolici colorati
         // quando ida_header è abilitato.
         if ida_header {
-            if let Some((addr, jmp_type)) = extract_addr_from_instruction(&insn, ip) {
+            if let Some((addr, jmp_type)) = extract_addr_from_instruction(&inst, ip) {
                 let sym_colored = if let Some(sym_name) = symbols.get(&addr) {
                     let name = try_demangle(sym_name, demangle).unwrap_or_else(|| sym_name.clone());
                     name.bright_green().to_string()
@@ -207,16 +196,24 @@ pub fn disasm(
 
                 // Sostituiamo l'indirizzo esadecimale nel testo formattato
                 // con il nome del simbolo (euristica: cerchiamo l'hex dell'indirizzo).
-                let addr_hex_intel = format!("0x{addr:x}");
+                let addr_hex_intel = format!("0x{addr:016x}");
+                let addr_hex_intel_upper = format!("0x{addr:016X}");
+                let addr_hex = format!("{addr:016x}");
                 let addr_hex_upper = format!("{addr:016X}");
+
                 let patched = if formatted.contains(&addr_hex_intel) {
                     formatted.replacen(&addr_hex_intel, &sym_colored, 1)
+                } else if formatted.contains(&addr_hex_intel_upper) {
+                    formatted.replacen(&addr_hex_intel_upper, &sym_colored, 1)
+                } else if formatted.contains(&addr_hex) {
+                    formatted.replacen(&addr_hex, &sym_colored, 1)
                 } else if formatted.contains(&addr_hex_upper) {
                     formatted.replacen(&addr_hex_upper, &sym_colored, 1)
                 } else {
                     // Nessun match testuale: stampiamo il testo com'è + il nome a fianco
                     format!("{formatted}  {sym_colored}")
                 };
+
                 print!("{}", patched);
             } else {
                 print!("{}", formatted);
