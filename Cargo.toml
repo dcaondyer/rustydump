@@ -1,7 +1,32 @@
 [package]
 name = "rustydump"
-version = "0.9.9"
+version = "1.0.0"
+authors = ["dcaondyer"]
+description = """
+Rustydump is a modern, objdump-compatible binary analysis tool written in Rust for i386 and amd64.
+It supports disassembly, symbol inspection, section/header parsing, and control-flow graph generation [EXPERIMENTAL] for multiple object file formats.
+It features selectable disassembly backends (iced-x86 and Zydis) and optional IDA-style enhanced output including labels and cross-references.
+"""
+homepage = "https://github.com/dcaondyer/rustydump"
+repository = "https://github.com/dcaondyer/rustydump"
+keywords = [
+    "disassembler",
+    "reverse-engineering",
+    "binary-analysis",
+    "objdump",
+    "objdump-clone"
+]
+categories = ["command-line-utilities"]
+license = "Unlicense OR MIT OR Apache-2.0"
+exclude = [
+    "/.github/",
+    "/target/",
+    "/.idea/",
+    "/.gitignore/"
+]
+autotests = false
 edition = "2024"
+rust-version = "1.93.0"
 
 [dependencies]
 colored = "3.1.1"

@@ -40,7 +40,6 @@ pub enum OpKind {
     Sub,
     Mul,
     Div,
-
     Call,
     Ret,
     Jmp,

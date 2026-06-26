@@ -12,10 +12,7 @@ use std::time::{Duration, UNIX_EPOCH};
 
 const BOX_WIDTH: usize = 75;
 
-// ── Box superiore stile IDA ───────────────────────────────────────────────────
-
 fn box_line(content: &str) -> String {
-    // Centra il contenuto dentro "| content |" di larghezza fissa
     let inner_width = BOX_WIDTH - 4; // tolgo "| " e " |"
     let padded = format!("{:^inner_width$}", content);
     format!("; |{}|", padded)
@@ -25,7 +22,6 @@ pub fn print_ida_file_header(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn
     let top = format!("; +{}+", "-".repeat(BOX_WIDTH - 2));
     let bottom = format!("; +{}+", "-".repeat(BOX_WIDTH - 2));
 
-    // ── Box iniziale ─────────────────────────────────────────────────────────
     println!("{}", top.bright_black());
     println!(
         "{}",
@@ -35,7 +31,6 @@ pub fn print_ida_file_header(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn
     println!("{}", bottom.bright_black());
     println!("{}", ";".bright_black());
 
-    // ── Hash del file ─────────────────────────────────────────────────────────
     let sha256 = {
         let mut h = Sha256::new();
         h.update(bytes);
@@ -66,7 +61,6 @@ pub fn print_ida_file_header(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn
     );
     println!("{}", ";".bright_black());
 
-    // ── Info file + formato ───────────────────────────────────────────────────
     println!(
         "{} {}",
         "; File Name   :".bright_black(),
@@ -94,7 +88,6 @@ pub fn print_ida_file_header(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn
 
             println!("{}", ";".bright_black());
 
-            // ── Sezioni ───────────────────────────────────────────────────────
             for (i, section) in pe.sections.iter().enumerate() {
                 let name = section.name().unwrap_or("?");
                 let vsize = section.virtual_size;
@@ -139,7 +132,6 @@ pub fn print_ida_file_header(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn
                 println!("{}", ";".bright_black());
             }
 
-            // ── Compiler / crate detection ────────────────────────────────────
             print_compiler_info(bytes);
         }
         Object::Elf(elf) => {
@@ -185,7 +177,6 @@ pub fn print_ida_file_header(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn
                 println!("{}", ";".bright_black());
             }
 
-            // ── Compiler / crate detection ────────────────────────────────────
             print_compiler_info(bytes);
         }
         Object::Mach(mach) => {
@@ -211,13 +202,11 @@ pub fn print_ida_file_header(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn
                 }
             }
 
-            // ── Compiler / crate detection ────────────────────────────────────
             print_compiler_info(bytes);
         }
         _ => {}
     }
 
-    // ── Separatore finale ─────────────────────────────────────────────────────
     println!(
         "{}",
         "; ==========================================================================="
@@ -227,8 +216,6 @@ pub fn print_ida_file_header(bytes: &[u8], file: &PathBuf) -> Result<(), Box<dyn
 
     Ok(())
 }
-
-// ── Header per singola sezione (rimpiazza print_ida_header) ───────────────────
 
 pub fn print_ida_section_header(
     section_name: &str,
@@ -266,7 +253,7 @@ pub fn print_ida_section_header(
 
     println!("{}", ";".bright_black());
 
-    // Label segmento stile IDA: "_text  segment para public 'CODE' use64"
+    // Per scherzo label segmento stile IDA: "_text  segment para public 'CODE' use64"
     let seg_label = if is_code {
         format!(
             "_{}\t\tsegment para public 'CODE' use64",
@@ -293,8 +280,6 @@ pub fn print_ida_section_header(
     );
     println!();
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn format_timestamp(ts: u32) -> Option<String> {
     // Converte il timestamp COFF in stringa leggibile
@@ -492,23 +477,23 @@ fn print_macho_sections(macho: &goblin::mach::MachO<'_>) {
     }
 }
 
-// ── Header stile IDA Pro OLD ──────────────────────────────────────────────────────
+// Header stile IDA Pro OLD
 
-pub fn print_ida_header(base_addr: u64, size: usize, section_name: &str) {
-    let separator = "─".repeat(60);
-    println!("{}", separator.bright_black());
-    println!(
-        "{}  {}",
-        "section:".bright_black(),
-        section_name.bright_yellow()
-    );
-    println!(
-        "{}  {:#018x}  {}  {:#x} bytes",
-        "range:".bright_black(),
-        base_addr,
-        "→".bright_black(),
-        size,
-    );
-    println!("{}", separator.bright_black());
-    println!();
-}
+//pub fn print_ida_header(base_addr: u64, size: usize, section_name: &str) {
+//    let separator = "─".repeat(60);
+//    println!("{}", separator.bright_black());
+//    println!(
+//        "{}  {}",
+//        "section:".bright_black(),
+//        section_name.bright_yellow()
+//    );
+//    println!(
+//        "{}  {:#018x}  {}  {:#x} bytes",
+//        "range:".bright_black(),
+//        base_addr,
+//        "→".bright_black(),
+//        size,
+//    );
+//    println!("{}", separator.bright_black());
+//    println!();
+//}

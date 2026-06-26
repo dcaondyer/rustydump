@@ -25,7 +25,6 @@ macro_rules! run_disasm {
         let mut jmp_target = HashMap::new();
         let mut jmp_xrefs = HashMap::<u64, BTreeSet<u64>>::new();
 
-        // Header stile IDA Pro
         if $ida_header {
             print_ida_section_header(
                 &$section.name,
@@ -157,7 +156,7 @@ pub fn disasm(
     code_rip: u64,
     instr_format: &InstructionFormat,
     demangle: DemangleStyle,
-    symbols: &SymbolMap, // mappa addr → nome simbolo
+    symbols: &SymbolMap,
     ida_header: bool,
     ida_jump: bool,
     ida_xrefs: bool,
@@ -215,14 +214,6 @@ pub fn extract_addr_from_instruction(
     text: &str,
     bitness: u32,
 ) -> Option<(u64, JmpType)> {
-    // ─────────────────────────────────────────────
-    // 1. CASO MIGLIORE: iced ha già il target
-    // ─────────────────────────────────────────────
-
-    // ─────────────────────────────────────────────
-    // 1. CONTROL FLOW DIRETTO (CALL / JMP / JCC)
-    // ─────────────────────────────────────────────
-
     if inst.is_call_near() || inst.is_call_near_indirect() {
         return Some((
             match bitness {
@@ -247,12 +238,7 @@ pub fn extract_addr_from_instruction(
         ));
     }
 
-    // ─────────────────────────────────────────────
-    // 2. LONG / INDIRECT BRANCHES (FAR / REGISTER / MEMORY)
-    // ─────────────────────────────────────────────
-
     if inst.is_call_far() || inst.is_call_far_indirect() {
-        // raro ma esiste in alcuni binari/ABI
         return Some((
             match bitness {
                 16 => inst.far_branch16() as u64,
@@ -265,7 +251,6 @@ pub fn extract_addr_from_instruction(
     }
 
     if inst.is_jmp_far() || inst.is_jmp_far_indirect() {
-        // raro ma esiste in alcuni binari/ABI
         return Some((
             match bitness {
                 16 => inst.far_branch16() as u64,
@@ -277,7 +262,6 @@ pub fn extract_addr_from_instruction(
         ));
     }
 
-    // Indirect jump/call: jmp rax / call [mem]
     if inst.op_count() > 0 {
         for i in 0..inst.op_count() {
             match inst.op_kind(i) {
@@ -288,19 +272,10 @@ pub fn extract_addr_from_instruction(
                 OpKind::FarBranch16 => return Some((inst.far_branch16() as u64, JmpType::Jmp)),
 
                 OpKind::Memory => {
-                    // NON è sempre un indirizzo valido
-                    // può essere:
-                    // - GOT entry
-                    // - vtable
-                    // - pointer indiretto
-                    // - struct field
-
-                    // 1. CASO MIGLIORE: RIP-relative (x86-64)
                     if inst.is_ip_rel_memory_operand() {
                         return Some((inst.ip_rel_memory_address(), JmpType::Jmp));
                     }
 
-                    // 2. HEURISTIC: memory con displacement
                     let disp = match bitness {
                         32 => inst.memory_displacement32() as u64,
                         64 => inst.memory_displacement64(),
@@ -311,19 +286,13 @@ pub fn extract_addr_from_instruction(
                         return Some((disp, JmpType::Jmp));
                     }
 
-                    // 3. fallback: base + disp (solo euristica debole)
-                    // caso: base + displacement (heuristic)
-                    // NON sempre valido come target CFG
                     let base = inst.memory_base();
                     if !base.is_ip() {
-                        continue; // meglio ignorare che sbagliare CFG
+                        continue;
                     }
                 }
 
                 OpKind::Register => {
-                    // jmp rax / call rbx
-                    // qui NON hai target statico
-                    // quindi non return
                     continue;
                 }
 
@@ -331,10 +300,6 @@ pub fn extract_addr_from_instruction(
             }
         }
     }
-
-    // ─────────────────────────────────────────────
-    // 3. FALLBACK STRING PARSING (ULTIMO RESORT)
-    // ─────────────────────────────────────────────
 
     let clean = text
         .trim()

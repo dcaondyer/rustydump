@@ -48,9 +48,6 @@ pub fn try_demangle(name: &str, style: DemangleStyle) -> Option<String> {
 }
 
 fn try_rust(name: &str) -> Option<String> {
-    // rustc-demangle restituisce sempre qualcosa, ma se non è mangled
-    // la rappresentazione Debug contiene il nome originale invariato.
-    // Usiamo questo per discriminare.
     let demangled = rust_demangle(name);
     let demangled = format!("{demangled:#}"); // # = no hash finale
     if demangled != name {

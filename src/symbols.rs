@@ -2,7 +2,6 @@ use goblin::mach::Mach;
 use goblin::Object;
 use std::collections::HashMap;
 
-/// Mappa indirizzo virtuale → nome simbolo grezzo (non demangled)
 pub type SymbolMap = HashMap<u64, String>;
 
 pub fn build_symbol_map(bytes: &[u8]) -> SymbolMap {
